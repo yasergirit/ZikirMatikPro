@@ -1,4 +1,4 @@
-package com.example.zikirmasterpro
+package com.yasergirit.zikirmasterpro
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -29,7 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.CircleShape
-import com.example.zikirmasterpro.ui.theme.ZikirMasterProTheme
+import com.yasergirit.zikirmasterpro.ui.theme.ZikirMasterProTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

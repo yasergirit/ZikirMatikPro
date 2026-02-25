@@ -1,4 +1,4 @@
-package com.example.zikirmasterpro.ui.theme
+package com.yasergirit.zikirmasterpro.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

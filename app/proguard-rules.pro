@@ -30,4 +30,4 @@
 -keep class * extends androidx.lifecycle.ViewModelProvider$Factory { *; }
 
 # Application classes
--keep class com.example.zikirmasterpro.** { *; }
+-keep class com.yasergirit.zikirmasterpro.** { *; }
