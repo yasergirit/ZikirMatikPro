@@ -1,11 +1,16 @@
 package com.yasergirit.zikirmasterpro
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
+import android.annotation.TargetApi
+import android.app.Activity
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -16,24 +21,32 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.datastore.preferences.core.edit
+import kotlinx.coroutines.flow.first
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import coil.request.CachePolicy
 import androidx.core.graphics.ColorUtils
 import androidx.palette.graphics.Palette
 import com.yasergirit.zikirmasterpro.ui.theme.ZikirMasterProTheme
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.random.Random
@@ -43,19 +56,51 @@ data class CounterSave(
     val timestamp: String
 )
 
+private val Context.dataStore by preferencesDataStore(name = "counter_data")
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             ZikirMasterProTheme {
-                CounterScreen()
+                CounterScreen(this)
             }
         }
     }
 }
 
+private fun saveCountersToDataStore(context: android.content.Context, counters: List<CounterSave>) {
+    val gson = Gson()
+    val json = gson.toJson(counters)
+    try {
+        val key = stringPreferencesKey("saved_counters")
+        // This should be done in a coroutine, but for simplicity we'll use runBlocking
+        kotlinx.coroutines.runBlocking {
+            context.dataStore.edit { preferences ->
+                preferences[key] = json
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+private suspend fun loadCountersFromDataStore(context: android.content.Context): List<CounterSave> {
+    val gson = Gson()
+    val key = stringPreferencesKey("saved_counters")
+    return try {
+        val jsonString = context.dataStore.data.first()[key] ?: return emptyList()
+        val type = object : TypeToken<List<CounterSave>>() {}.type
+        gson.fromJson(jsonString, type) ?: emptyList()
+    } catch (e: Exception) {
+        e.printStackTrace()
+        emptyList()
+    }
+}
+
+@TargetApi(26)
 @Composable
-private fun CounterScreen() {
+private fun CounterScreen(activity: android.app.Activity) {
     var count by rememberSaveable { mutableIntStateOf(0) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var savedCounters by remember { mutableStateOf(listOf<CounterSave>()) }
@@ -63,6 +108,18 @@ private fun CounterScreen() {
     var logTextColor by remember { mutableStateOf(Color(0xFF2C4350)) }
     
     val context = LocalContext.current
+    
+    // Load saved counters from DataStore on app launch
+    LaunchedEffect(Unit) {
+        val loadedCounters = loadCountersFromDataStore(context)
+        savedCounters = loadedCounters
+    }
+    
+    // Save counters to DataStore whenever they change
+    LaunchedEffect(savedCounters) {
+        saveCountersToDataStore(context, savedCounters)
+    }
+    
     val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("tr", "TR"))
     val islamicImages = listOf(
         "https://images.unsplash.com/photo-1542816417-0983c9c9ad53",
@@ -155,26 +212,59 @@ private fun CounterScreen() {
         } else {
             // Main Content
         Box(modifier = Modifier.fillMaxSize()) {
-            // Settings icon at top-right
-            IconButton(
-                onClick = { /* TODO: Open settings */ },
+            // Top right icons (Settings and Power)
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(16.dp)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Ayarlar",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
+                IconButton(
+                    onClick = { /* TODO: Open settings */ },
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Ayarlar",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                
+                IconButton(
+                    onClick = {
+                        (context as? Activity)?.finish()
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = "Kapat",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
             
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-        Spacer(modifier = Modifier.height(200.dp))
+        Spacer(modifier = Modifier.height(30.dp))
+        
+        // Ramadan decoration header image
+        SubcomposeAsyncImage(
+            model = ImageRequest.Builder(context)
+                .data("https://images.unsplash.com/photo-1609709228789-60af8e1a01cf")
+                .allowHardware(false)
+                .crossfade(true)
+                .build(),
+            contentDescription = "Hayırlı Ramazanlar",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .height(120.dp)
+        )
+        
+        Spacer(modifier = Modifier.height(30.dp))
         
         // Digital display
         Box(
@@ -209,7 +299,7 @@ private fun CounterScreen() {
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White
                     ),
-                    border = BorderStroke(2.dp, Color(0xFF2C4350))
+                    border = BorderStroke(2.dp, Color.White)
                 ) {
                     // Empty button - just the circle
                 }
@@ -225,7 +315,7 @@ private fun CounterScreen() {
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF8FA9B3)
                     ),
-                    border = BorderStroke(2.dp, Color(0xFF2C4350)),
+                    border = BorderStroke(2.dp, Color.White),
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text(
@@ -253,7 +343,7 @@ private fun CounterScreen() {
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF8FA9B3)
             ),
-            border = BorderStroke(2.dp, Color(0xFF2C4350))
+            border = BorderStroke(2.dp, Color.White)
         ) {
             Text(
                 text = "KAYDET",
@@ -295,7 +385,7 @@ private fun CounterScreen() {
                     items(savedCounters.reversed()) { item ->
                         Text(
                             text = "${item.timestamp} - ${item.value}",
-                            color = logTextColor,
+                            color = Color.Black,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
