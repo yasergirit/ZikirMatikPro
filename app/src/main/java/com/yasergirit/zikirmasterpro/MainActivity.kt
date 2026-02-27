@@ -218,6 +218,29 @@ private suspend fun loadSoundEnabledFromDataStore(context: android.content.Conte
     }
 }
 
+private fun saveVibrationEnabledToDataStore(context: android.content.Context, isEnabled: Boolean) {
+    try {
+        val key = androidx.datastore.preferences.core.booleanPreferencesKey("vibration_enabled")
+        kotlinx.coroutines.runBlocking {
+            context.dataStore.edit { preferences ->
+                preferences[key] = isEnabled
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+private suspend fun loadVibrationEnabledFromDataStore(context: android.content.Context): Boolean {
+    val key = androidx.datastore.preferences.core.booleanPreferencesKey("vibration_enabled")
+    return try {
+        context.dataStore.data.first()[key] ?: true // Default to vibration enabled
+    } catch (e: Exception) {
+        e.printStackTrace()
+        true
+    }
+}
+
 private fun saveLanguageToDataStore(context: android.content.Context, languageCode: String) {
     try {
         val key = stringPreferencesKey("app_language")
@@ -252,6 +275,7 @@ private fun CounterScreen(activity: android.app.Activity) {
     var logTextColor by remember { mutableStateOf(Color(0xFF2C4350)) }
     var isDarkTheme by remember { mutableStateOf(true) }
     var isSoundEnabled by remember { mutableStateOf(true) }
+    var isVibrationEnabled by remember { mutableStateOf(true) }
     var selectedLanguage by remember { mutableStateOf("tr") }
     
     val context = LocalContext.current
@@ -265,6 +289,8 @@ private fun CounterScreen(activity: android.app.Activity) {
         isDarkTheme = loadedTheme
         val loadedSound = loadSoundEnabledFromDataStore(context)
         isSoundEnabled = loadedSound
+        val loadedVibration = loadVibrationEnabledFromDataStore(context)
+        isVibrationEnabled = loadedVibration
         val loadedLanguage = loadLanguageFromDataStore(context)
         selectedLanguage = loadedLanguage
     }
@@ -304,6 +330,11 @@ private fun CounterScreen(activity: android.app.Activity) {
             onSoundChange = {
                 isSoundEnabled = it
                 saveSoundEnabledToDataStore(context, it)
+            },
+            isVibrationEnabled = isVibrationEnabled,
+            onVibrationChange = {
+                isVibrationEnabled = it
+                saveVibrationEnabledToDataStore(context, it)
             },
             selectedLanguage = selectedLanguage,
             onLanguageChange = {
@@ -479,12 +510,14 @@ private fun CounterScreen(activity: android.app.Activity) {
                     onClick = { 
                         count += 1
                         // Titreşim efekti
-                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                            vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
-                        } else {
-                            @Suppress("DEPRECATION")
-                            vibrator.vibrate(50)
+                        if (isVibrationEnabled) {
+                            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+                            } else {
+                                @Suppress("DEPRECATION")
+                                vibrator.vibrate(50)
+                            }
                         }
                         // Ses efekti (sadece aktifse)
                         if (isSoundEnabled) {
@@ -663,6 +696,8 @@ private fun SettingsScreen(
     isDarkTheme: Boolean,
     isSoundEnabled: Boolean,
     onSoundChange: (Boolean) -> Unit,
+    isVibrationEnabled: Boolean,
+    onVibrationChange: (Boolean) -> Unit,
     selectedLanguage: String,
     onLanguageChange: (String) -> Unit
 ) {
@@ -930,6 +965,41 @@ private fun SettingsScreen(
                     Switch(
                         checked = isSoundEnabled,
                         onCheckedChange = onSoundChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF1A4D2E),
+                            checkedTrackColor = Color(0xFF4F9F6B),
+                            uncheckedThumbColor = Color.Gray,
+                            uncheckedTrackColor = Color.LightGray
+                        )
+                    )
+                }
+            }
+
+            // Titreşim Modu
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(bottom = 20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = cardBackgroundColor
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = t("Titreşim Modu", "Vibration Mode"),
+                        color = textColor,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Switch(
+                        checked = isVibrationEnabled,
+                        onCheckedChange = onVibrationChange,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color(0xFF1A4D2E),
                             checkedTrackColor = Color(0xFF4F9F6B),
