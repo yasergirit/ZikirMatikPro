@@ -9,7 +9,6 @@ import android.annotation.TargetApi
 import android.app.Activity
 import android.os.Vibrator
 import android.os.VibrationEffect
-import android.media.ToneGenerator
 import android.media.AudioManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -150,6 +149,29 @@ private suspend fun loadSoundEnabledFromDataStore(context: android.content.Conte
     }
 }
 
+private fun saveLanguageToDataStore(context: android.content.Context, languageCode: String) {
+    try {
+        val key = stringPreferencesKey("app_language")
+        kotlinx.coroutines.runBlocking {
+            context.dataStore.edit { preferences ->
+                preferences[key] = languageCode
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+private suspend fun loadLanguageFromDataStore(context: android.content.Context): String {
+    val key = stringPreferencesKey("app_language")
+    return try {
+        context.dataStore.data.first()[key] ?: "tr"
+    } catch (e: Exception) {
+        e.printStackTrace()
+        "tr"
+    }
+}
+
 @TargetApi(26)
 @Composable
 private fun CounterScreen(activity: android.app.Activity) {
@@ -161,8 +183,10 @@ private fun CounterScreen(activity: android.app.Activity) {
     var logTextColor by remember { mutableStateOf(Color(0xFF2C4350)) }
     var isDarkTheme by remember { mutableStateOf(true) }
     var isSoundEnabled by remember { mutableStateOf(true) }
+    var selectedLanguage by remember { mutableStateOf("tr") }
     
     val context = LocalContext.current
+    fun t(tr: String, en: String) = if (selectedLanguage == "en") en else tr
     
     // Load saved counters from DataStore on app launch
     LaunchedEffect(Unit) {
@@ -172,6 +196,8 @@ private fun CounterScreen(activity: android.app.Activity) {
         isDarkTheme = loadedTheme
         val loadedSound = loadSoundEnabledFromDataStore(context)
         isSoundEnabled = loadedSound
+        val loadedLanguage = loadLanguageFromDataStore(context)
+        selectedLanguage = loadedLanguage
     }
     
     // Save counters to DataStore whenever they change
@@ -179,13 +205,14 @@ private fun CounterScreen(activity: android.app.Activity) {
         saveCountersToDataStore(context, savedCounters)
     }
     
-    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("tr", "TR"))
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", if (selectedLanguage == "en") Locale.US else Locale("tr", "TR"))
     val islamicImages = listOf(
-        "https://images.unsplash.com/photo-1542816417-0983c9c9ad53",
-        "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa",
-        "https://images.unsplash.com/photo-1564769625905-50e93615e769",
-        "https://images.unsplash.com/photo-1580418827493-f2b22c0a76cb",
-        "https://images.unsplash.com/photo-1584286595398-a59f21d7620b"
+        "https://images.unsplash.com/photo-1580418827493-f2b22c0a76cb?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+        "https://images.unsplash.com/photo-1592326871020-04f58c1a52f3?q=80&w=765&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+        "https://images.unsplash.com/photo-1513072064285-240f87fa81e8?q=80&w=627&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+        "https://images.unsplash.com/photo-1590075865003-e48277faa558?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+        "https://images.unsplash.com/photo-1519818187420-8e49de7adeef?q=80&w=627&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+        "https://images.unsplash.com/photo-1527838832700-5059252407fa?q=80&w=698&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
     )
     val randomImage = remember { islamicImages.random() }
     
@@ -208,6 +235,11 @@ private fun CounterScreen(activity: android.app.Activity) {
             onSoundChange = {
                 isSoundEnabled = it
                 saveSoundEnabledToDataStore(context, it)
+            },
+            selectedLanguage = selectedLanguage,
+            onLanguageChange = {
+                selectedLanguage = it
+                saveLanguageToDataStore(context, it)
             }
         )
     } else {
@@ -284,7 +316,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                     )
                     Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        text = "Yükleniyor...",
+                        text = t("Yükleniyor...", "Loading..."),
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium
@@ -306,7 +338,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
-                        contentDescription = "Ayarlar",
+                        contentDescription = t("Ayarlar", "Settings"),
                         tint = Color.White,
                         modifier = Modifier.size(32.dp)
                     )
@@ -319,7 +351,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                        contentDescription = "Kapat",
+                        contentDescription = t("Kapat", "Close"),
                         tint = Color.White,
                         modifier = Modifier.size(32.dp)
                     )
@@ -388,11 +420,8 @@ private fun CounterScreen(activity: android.app.Activity) {
                         // Ses efekti (sadece aktifse)
                         if (isSoundEnabled) {
                             try {
-                                val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-                                toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
-                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                    toneGenerator.release()
-                                }, 150)
+                                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                                audioManager.playSoundEffect(AudioManager.FX_KEY_CLICK)
                             } catch (e: Exception) {
                                 e.printStackTrace()
                             }
@@ -450,7 +479,7 @@ private fun CounterScreen(activity: android.app.Activity) {
             border = BorderStroke(2.dp, Color.White)
         ) {
             Text(
-                text = "KAYDET",
+                text = t("KAYDET", "SAVE"),
                 color = Color.White,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
@@ -472,7 +501,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Kayıtlar",
+                    text = t("Kayıtlar", "Records"),
                     color = logTextColor,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -507,7 +536,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
-                                    contentDescription = "Sil",
+                                    contentDescription = t("Sil", "Delete"),
                                     tint = Color.Red,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -530,16 +559,16 @@ private fun CounterScreen(activity: android.app.Activity) {
         AlertDialog(
             onDismissRequest = { showDeleteAllConfirm = false },
             title = {
-                Text(text = "Tüm Kayıtları Sil")
+                Text(text = t("Tüm Kayıtları Sil", "Delete All Records"))
             },
             text = {
-                Text(text = "Tüm kayıtları silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")
+                Text(text = t("Tüm kayıtları silmek istediğinize emin misiniz? Bu işlem geri alınamaz.", "Are you sure you want to delete all records? This action cannot be undone."))
             },
             confirmButton = {
                 Button(
                     onClick = { showDeleteAllConfirm = false }
                 ) {
-                    Text("Hayır")
+                    Text(t("Hayır", "No"))
                 }
             },
             dismissButton = {
@@ -550,7 +579,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                         showSettingsScreen = false
                     }
                 ) {
-                    Text("Evet")
+                    Text(t("Evet", "Yes"))
                 }
             }
         )
@@ -564,10 +593,13 @@ private fun SettingsScreen(
     savedCounters: List<CounterSave>,
     isDarkTheme: Boolean,
     isSoundEnabled: Boolean,
-    onSoundChange: (Boolean) -> Unit
+    onSoundChange: (Boolean) -> Unit,
+    selectedLanguage: String,
+    onLanguageChange: (String) -> Unit
 ) {
+    fun t(tr: String, en: String) = if (selectedLanguage == "en") en else tr
     // İstatistik hesaplama
-    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("tr", "TR"))
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", if (selectedLanguage == "en") Locale.US else Locale("tr", "TR"))
     val calendar = Calendar.getInstance()
     val today = Calendar.getInstance()
     
@@ -659,7 +691,7 @@ private fun SettingsScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                        contentDescription = "Geri",
+                        contentDescription = t("Geri", "Back"),
                         tint = textColor,
                         modifier = Modifier.size(32.dp)
                     )
@@ -669,7 +701,7 @@ private fun SettingsScreen(
             Spacer(modifier = Modifier.height(40.dp))
 
             Text(
-                text = "Ayarlar",
+                text = t("Ayarlar", "Settings"),
                 color = textColor,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
@@ -690,7 +722,7 @@ private fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "İstatistikler",
+                        text = t("İstatistikler", "Statistics"),
                         color = textColor,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -709,7 +741,7 @@ private fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Bugün",
+                                text = t("Bugün", "Today"),
                                 color = textColor.copy(alpha = 0.7f),
                                 fontSize = 12.sp
                             )
@@ -723,7 +755,7 @@ private fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Bu Hafta",
+                                text = t("Bu Hafta", "This Week"),
                                 color = textColor.copy(alpha = 0.7f),
                                 fontSize = 12.sp
                             )
@@ -737,7 +769,7 @@ private fun SettingsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Bu Ay",
+                                text = t("Bu Ay", "This Month"),
                                 color = textColor.copy(alpha = 0.7f),
                                 fontSize = 12.sp
                             )
@@ -747,11 +779,60 @@ private fun SettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     Text(
-                        text = "Toplam Kayıt: ${savedCounters.size}",
+                        text = "${t("Toplam Kayıt", "Total Records")}: ${savedCounters.size}",
                         color = textColor.copy(alpha = 0.7f),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     )
+                }
+            }
+
+            // Dil Seçimi
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(bottom = 12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = cardBackgroundColor
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = t("Dil", "Language"),
+                        color = textColor,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { onLanguageChange("tr") },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (selectedLanguage == "tr") accentColor.copy(alpha = 0.2f) else Color.Transparent,
+                                contentColor = textColor
+                            )
+                        ) {
+                            Text("Türkçe")
+                        }
+                        OutlinedButton(
+                            onClick = { onLanguageChange("en") },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (selectedLanguage == "en") accentColor.copy(alpha = 0.2f) else Color.Transparent,
+                                contentColor = textColor
+                            )
+                        ) {
+                            Text("English")
+                        }
+                    }
                 }
             }
 
@@ -772,7 +853,7 @@ private fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Ses Efektleri",
+                        text = t("Ses Efektleri", "Sound Effects"),
                         color = textColor,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
@@ -800,7 +881,7 @@ private fun SettingsScreen(
                     .fillMaxWidth(0.8f)
                     .height(50.dp)
             ) {
-                Text("Tüm Kayıtları Sil", color = Color.White, fontSize = 16.sp)
+                Text(t("Tüm Kayıtları Sil", "Delete All Records"), color = Color.White, fontSize = 16.sp)
             }
 
         }
