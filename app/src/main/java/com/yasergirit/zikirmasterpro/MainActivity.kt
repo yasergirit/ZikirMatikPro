@@ -10,6 +10,7 @@ import android.app.Activity
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -99,6 +100,29 @@ private suspend fun loadCountersFromDataStore(context: android.content.Context):
     }
 }
 
+private fun saveThemeToDataStore(context: android.content.Context, isDark: Boolean) {
+    try {
+        val key = androidx.datastore.preferences.core.booleanPreferencesKey("is_dark_theme")
+        kotlinx.coroutines.runBlocking {
+            context.dataStore.edit { preferences ->
+                preferences[key] = isDark
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+private suspend fun loadThemeFromDataStore(context: android.content.Context): Boolean {
+    val key = androidx.datastore.preferences.core.booleanPreferencesKey("is_dark_theme")
+    return try {
+        context.dataStore.data.first()[key] ?: true // Default to dark theme
+    } catch (e: Exception) {
+        e.printStackTrace()
+        true
+    }
+}
+
 @TargetApi(26)
 @Composable
 private fun CounterScreen(activity: android.app.Activity) {
@@ -109,6 +133,7 @@ private fun CounterScreen(activity: android.app.Activity) {
     var savedCounters by remember { mutableStateOf(listOf<CounterSave>()) }
     var isImageLoaded by remember { mutableStateOf(false) }
     var logTextColor by remember { mutableStateOf(Color(0xFF2C4350)) }
+    var isDarkTheme by remember { mutableStateOf(true) }
     
     val context = LocalContext.current
     
@@ -116,6 +141,8 @@ private fun CounterScreen(activity: android.app.Activity) {
     LaunchedEffect(Unit) {
         val loadedCounters = loadCountersFromDataStore(context)
         savedCounters = loadedCounters
+        val loadedTheme = loadThemeFromDataStore(context)
+        isDarkTheme = loadedTheme
     }
     
     // Save counters to DataStore whenever they change
@@ -146,7 +173,12 @@ private fun CounterScreen(activity: android.app.Activity) {
         SettingsScreen(
             onBack = { showSettingsScreen = false },
             onDeleteAll = { showDeleteAllConfirm = true },
-            savedCounters = savedCounters
+            savedCounters = savedCounters,
+            isDarkTheme = isDarkTheme,
+            onThemeChange = { 
+                isDarkTheme = it
+                saveThemeToDataStore(context, it)
+            }
         )
     } else {
         // Main Screen
@@ -159,11 +191,19 @@ private fun CounterScreen(activity: android.app.Activity) {
                     .fillMaxSize()
                     .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF1A4D2E),
-                            Color(0xFF4F9F6B),
-                            Color(0xFF1A4D2E)
-                        )
+                        colors = if (isDarkTheme) {
+                            listOf(
+                                Color(0xFF1A4D2E),
+                                Color(0xFF4F9F6B),
+                                Color(0xFF1A4D2E)
+                            )
+                        } else {
+                            listOf(
+                                Color(0xFFE8F5E9),
+                                Color(0xFFA5D6A7),
+                                Color(0xFFE8F5E9)
+                            )
+                        }
                     )
                 )
         )
@@ -499,7 +539,9 @@ private fun CounterScreen(activity: android.app.Activity) {
 private fun SettingsScreen(
     onBack: () -> Unit,
     onDeleteAll: () -> Unit,
-    savedCounters: List<CounterSave>
+    savedCounters: List<CounterSave>,
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean) -> Unit
 ) {
     // İstatistik hesaplama
     val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR"))
@@ -663,6 +705,41 @@ private fun SettingsScreen(
                         color = Color(0xFF2C4350).copy(alpha = 0.7f),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Tema Seçimi
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(bottom = 20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF0F0F0)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Koyu Tema",
+                        color = Color(0xFF2C4350),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Switch(
+                        checked = isDarkTheme,
+                        onCheckedChange = onThemeChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF1A4D2E),
+                            checkedTrackColor = Color(0xFF4F9F6B),
+                            uncheckedThumbColor = Color.Gray,
+                            uncheckedTrackColor = Color.LightGray
+                        )
                     )
                 }
             }
