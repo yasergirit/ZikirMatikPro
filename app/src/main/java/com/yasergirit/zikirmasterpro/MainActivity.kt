@@ -127,6 +127,29 @@ private suspend fun loadThemeFromDataStore(context: android.content.Context): Bo
     }
 }
 
+private fun saveSoundEnabledToDataStore(context: android.content.Context, isEnabled: Boolean) {
+    try {
+        val key = androidx.datastore.preferences.core.booleanPreferencesKey("sound_enabled")
+        kotlinx.coroutines.runBlocking {
+            context.dataStore.edit { preferences ->
+                preferences[key] = isEnabled
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+private suspend fun loadSoundEnabledFromDataStore(context: android.content.Context): Boolean {
+    val key = androidx.datastore.preferences.core.booleanPreferencesKey("sound_enabled")
+    return try {
+        context.dataStore.data.first()[key] ?: true // Default to sound enabled
+    } catch (e: Exception) {
+        e.printStackTrace()
+        true
+    }
+}
+
 @TargetApi(26)
 @Composable
 private fun CounterScreen(activity: android.app.Activity) {
@@ -138,6 +161,7 @@ private fun CounterScreen(activity: android.app.Activity) {
     var isImageLoaded by remember { mutableStateOf(false) }
     var logTextColor by remember { mutableStateOf(Color(0xFF2C4350)) }
     var isDarkTheme by remember { mutableStateOf(true) }
+    var isSoundEnabled by remember { mutableStateOf(true) }
     
     val context = LocalContext.current
     
@@ -147,6 +171,8 @@ private fun CounterScreen(activity: android.app.Activity) {
         savedCounters = loadedCounters
         val loadedTheme = loadThemeFromDataStore(context)
         isDarkTheme = loadedTheme
+        val loadedSound = loadSoundEnabledFromDataStore(context)
+        isSoundEnabled = loadedSound
     }
     
     // Save counters to DataStore whenever they change
@@ -182,6 +208,11 @@ private fun CounterScreen(activity: android.app.Activity) {
             onThemeChange = { 
                 isDarkTheme = it
                 saveThemeToDataStore(context, it)
+            },
+            isSoundEnabled = isSoundEnabled,
+            onSoundChange = {
+                isSoundEnabled = it
+                saveSoundEnabledToDataStore(context, it)
             }
         )
     } else {
@@ -359,15 +390,17 @@ private fun CounterScreen(activity: android.app.Activity) {
                             @Suppress("DEPRECATION")
                             vibrator.vibrate(50)
                         }
-                        // Ses efekti
-                        try {
-                            val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-                            toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                toneGenerator.release()
-                            }, 150)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
+                        // Ses efekti (sadece aktifse)
+                        if (isSoundEnabled) {
+                            try {
+                                val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                                toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    toneGenerator.release()
+                                }, 150)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -565,7 +598,9 @@ private fun SettingsScreen(
     onDeleteAll: () -> Unit,
     savedCounters: List<CounterSave>,
     isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit
+    onThemeChange: (Boolean) -> Unit,
+    isSoundEnabled: Boolean,
+    onSoundChange: (Boolean) -> Unit
 ) {
     // İstatistik hesaplama
     val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR"))
@@ -737,7 +772,7 @@ private fun SettingsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
-                    .padding(bottom = 20.dp),
+                    .padding(bottom = 12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = Color(0xFFF0F0F0)
                 )
@@ -758,6 +793,41 @@ private fun SettingsScreen(
                     Switch(
                         checked = isDarkTheme,
                         onCheckedChange = onThemeChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF1A4D2E),
+                            checkedTrackColor = Color(0xFF4F9F6B),
+                            uncheckedThumbColor = Color.Gray,
+                            uncheckedTrackColor = Color.LightGray
+                        )
+                    )
+                }
+            }
+            
+            // Ses Efektleri
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(bottom = 20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF0F0F0)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Ses Efektleri",
+                        color = Color(0xFF2C4350),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Switch(
+                        checked = isSoundEnabled,
+                        onCheckedChange = onSoundChange,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color(0xFF1A4D2E),
                             checkedTrackColor = Color(0xFF4F9F6B),
