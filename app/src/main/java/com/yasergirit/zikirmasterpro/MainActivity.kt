@@ -205,10 +205,6 @@ private fun CounterScreen(activity: android.app.Activity) {
             onDeleteAll = { showDeleteAllConfirm = true },
             savedCounters = savedCounters,
             isDarkTheme = isDarkTheme,
-            onThemeChange = { 
-                isDarkTheme = it
-                saveThemeToDataStore(context, it)
-            },
             isSoundEnabled = isSoundEnabled,
             onSoundChange = {
                 isSoundEnabled = it
@@ -598,7 +594,6 @@ private fun SettingsScreen(
     onDeleteAll: () -> Unit,
     savedCounters: List<CounterSave>,
     isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit,
     isSoundEnabled: Boolean,
     onSoundChange: (Boolean) -> Unit
 ) {
@@ -791,41 +786,6 @@ private fun SettingsScreen(
                 }
             }
 
-            // Tema Seçimi
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .padding(bottom = 12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = cardBackgroundColor
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Koyu Tema",
-                        color = textColor,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Switch(
-                        checked = isDarkTheme,
-                        onCheckedChange = onThemeChange,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFF1A4D2E),
-                            checkedTrackColor = Color(0xFF4F9F6B),
-                            uncheckedThumbColor = Color.Gray,
-                            uncheckedTrackColor = Color.LightGray
-                        )
-                    )
-                }
-            }
-            
             // Ses Efektleri
             Card(
                 modifier = Modifier
