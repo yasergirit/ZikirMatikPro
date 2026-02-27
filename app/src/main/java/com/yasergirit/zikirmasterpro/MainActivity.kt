@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -393,13 +394,33 @@ private fun CounterScreen(activity: android.app.Activity) {
                         .weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    items(savedCounters.reversed()) { item ->
-                        Text(
-                            text = "${item.timestamp} - ${item.value}",
-                            color = Color.Black,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
+                    items(savedCounters.reversed(), key = { "${it.timestamp}-${it.value}" }) { item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${item.timestamp} - ${item.value}",
+                                color = Color.Black,
+                                fontSize = 12.sp
+                            )
+                            IconButton(
+                                onClick = {
+                                    savedCounters = savedCounters.filter { it != item }
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Sil",
+                                    tint = Color.Red,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
