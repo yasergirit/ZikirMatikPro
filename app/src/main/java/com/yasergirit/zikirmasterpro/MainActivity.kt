@@ -567,7 +567,7 @@ private fun SettingsScreen(
     onSoundChange: (Boolean) -> Unit
 ) {
     // İstatistik hesaplama
-    val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR"))
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("tr", "TR"))
     val calendar = Calendar.getInstance()
     val today = Calendar.getInstance()
     
