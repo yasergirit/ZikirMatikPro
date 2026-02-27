@@ -103,6 +103,8 @@ private suspend fun loadCountersFromDataStore(context: android.content.Context):
 private fun CounterScreen(activity: android.app.Activity) {
     var count by rememberSaveable { mutableIntStateOf(0) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var showSettingsScreen by remember { mutableStateOf(false) }
+    var showDeleteAllConfirm by remember { mutableStateOf(false) }
     var savedCounters by remember { mutableStateOf(listOf<CounterSave>()) }
     var isImageLoaded by remember { mutableStateOf(false) }
     var logTextColor by remember { mutableStateOf(Color(0xFF2C4350)) }
@@ -138,14 +140,23 @@ private fun CounterScreen(activity: android.app.Activity) {
         .memoryCachePolicy(CachePolicy.ENABLED)
         .build()
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Gradient background
+    if (showSettingsScreen) {
+        // Settings Screen
+        SettingsScreen(
+            onBack = { showSettingsScreen = false },
+            onDeleteAll = { showDeleteAllConfirm = true },
+            savedCountersCount = savedCounters.size
+        )
+    } else {
+        // Main Screen
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Gradient background
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
                     Brush.verticalGradient(
                         colors = listOf(
                             Color(0xFF1A4D2E),
@@ -220,7 +231,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 IconButton(
-                    onClick = { /* TODO: Open settings */ },
+                    onClick = { showSettingsScreen = true },
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
@@ -428,6 +439,105 @@ private fun CounterScreen(activity: android.app.Activity) {
                 }
             }
         )
+    }
+    }
+
+    // Delete All Confirmation Dialog
+    if (showDeleteAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllConfirm = false },
+            title = {
+                Text(text = "Tüm Kayıtları Sil")
+            },
+            text = {
+                Text(text = "Tüm kayıtları silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showDeleteAllConfirm = false }
+                ) {
+                    Text("Hayır")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = {
+                        savedCounters = emptyList()
+                        showDeleteAllConfirm = false
+                        showSettingsScreen = false
+                    }
+                ) {
+                    Text("Evet")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    onBack: () -> Unit,
+    onDeleteAll: () -> Unit,
+    savedCountersCount: Int
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
+        ) {
+            // Back button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = "Geri",
+                        tint = Color(0xFF2C4350),
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            Text(
+                text = "Ayarlar",
+                color = Color(0xFF2C4350),
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 40.dp)
+            )
+
+            // Delete All Button
+            Button(
+                onClick = onDeleteAll,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE74C3C)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .height(50.dp)
+            ) {
+                Text("Tüm Kayıtları Sil", color = Color.White, fontSize = 16.sp)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "Kaydedilen Zikir: $savedCountersCount",
+                color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                fontSize = 12.sp
+            )
+        }
     }
 }
 
