@@ -7,6 +7,8 @@ import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.annotation.TargetApi
 import android.app.Activity
+import android.os.Vibrator
+import android.os.VibrationEffect
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -345,7 +347,17 @@ private fun CounterScreen(activity: android.app.Activity) {
             Box(modifier = Modifier.size(160.dp)) {
                 // Main counter button
                 Button(
-                    onClick = { count += 1 },
+                    onClick = { 
+                        count += 1
+                        // Titreşim efekti
+                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+                        } else {
+                            @Suppress("DEPRECATION")
+                            vibrator.vibrate(50)
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
