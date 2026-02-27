@@ -379,7 +379,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Kaydedilen Zikirler",
+                    text = "Kayıtlar",
                     color = logTextColor,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
