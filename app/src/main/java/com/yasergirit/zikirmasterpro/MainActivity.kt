@@ -154,7 +154,6 @@ private suspend fun loadSoundEnabledFromDataStore(context: android.content.Conte
 @Composable
 private fun CounterScreen(activity: android.app.Activity) {
     var count by rememberSaveable { mutableIntStateOf(0) }
-    var showResetConfirm by remember { mutableStateOf(false) }
     var showSettingsScreen by remember { mutableStateOf(false) }
     var showDeleteAllConfirm by remember { mutableStateOf(false) }
     var savedCounters by remember { mutableStateOf(listOf<CounterSave>()) }
@@ -411,7 +410,7 @@ private fun CounterScreen(activity: android.app.Activity) {
 
                 // Reset button
                 Button(
-                    onClick = { showResetConfirm = true },
+                    onClick = { count = 0 },
                     modifier = Modifier
                         .size(30.dp)
                         .align(Alignment.TopEnd)
@@ -523,36 +522,6 @@ private fun CounterScreen(activity: android.app.Activity) {
         }
         }
         }
-    }
-
-    // Reset confirmation dialog
-    if (showResetConfirm) {
-        AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
-            title = {
-                Text(text = "Sıfırla")
-            },
-            text = {
-                Text(text = "Sıfırlamak istediğinize emin misiniz?")
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showResetConfirm = false }
-                ) {
-                    Text("Hayır")
-                }
-            },
-            dismissButton = {
-                Button(
-                    onClick = {
-                        count = 0
-                        showResetConfirm = false
-                    }
-                ) {
-                    Text("Evet")
-                }
-            }
-        )
     }
     }
 
