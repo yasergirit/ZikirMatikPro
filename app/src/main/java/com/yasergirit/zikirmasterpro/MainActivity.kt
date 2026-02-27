@@ -652,10 +652,33 @@ private fun SettingsScreen(
             false
         }
     }
+    
+    // Tema renklerini ayarla
+    val backgroundColor = if (isDarkTheme) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF1A4D2E),
+                Color(0xFF4F9F6B),
+                Color(0xFF1A4D2E)
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFE8F5E9),
+                Color(0xFFA5D6A7),
+                Color(0xFFE8F5E9)
+            )
+        )
+    }
+    val textColor = if (isDarkTheme) Color.White else Color(0xFF2C4350)
+    val cardBackgroundColor = if (isDarkTheme) Color(0xFF2C4350).copy(alpha = 0.7f) else Color(0xFFF0F0F0)
+    val accentColor = if (isDarkTheme) Color(0xFF4F9F6B) else Color(0xFF1A4D2E)
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(backgroundColor)
     ) {
         Column(
             modifier = Modifier
@@ -673,7 +696,7 @@ private fun SettingsScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                         contentDescription = "Geri",
-                        tint = Color(0xFF2C4350),
+                        tint = textColor,
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -683,7 +706,7 @@ private fun SettingsScreen(
 
             Text(
                 text = "Ayarlar",
-                color = Color(0xFF2C4350),
+                color = textColor,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 20.dp)
@@ -695,7 +718,7 @@ private fun SettingsScreen(
                     .fillMaxWidth(0.9f)
                     .padding(bottom = 20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFF0F0F0)
+                    containerColor = cardBackgroundColor
                 )
             ) {
                 Column(
@@ -704,7 +727,7 @@ private fun SettingsScreen(
                 ) {
                     Text(
                         text = "İstatistikler",
-                        color = Color(0xFF2C4350),
+                        color = textColor,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -717,13 +740,13 @@ private fun SettingsScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "$todayCount",
-                                color = Color(0xFF1A4D2E),
+                                color = accentColor,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "Bugün",
-                                color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                                color = textColor.copy(alpha = 0.7f),
                                 fontSize = 12.sp
                             )
                         }
@@ -731,13 +754,13 @@ private fun SettingsScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "$weekCount",
-                                color = Color(0xFF1A4D2E),
+                                color = accentColor,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "Bu Hafta",
-                                color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                                color = textColor.copy(alpha = 0.7f),
                                 fontSize = 12.sp
                             )
                         }
@@ -745,13 +768,13 @@ private fun SettingsScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "$monthCount",
-                                color = Color(0xFF1A4D2E),
+                                color = accentColor,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "Bu Ay",
-                                color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                                color = textColor.copy(alpha = 0.7f),
                                 fontSize = 12.sp
                             )
                         }
@@ -761,7 +784,7 @@ private fun SettingsScreen(
                     
                     Text(
                         text = "Toplam Kayıt: ${savedCounters.size}",
-                        color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                        color = textColor.copy(alpha = 0.7f),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -774,7 +797,7 @@ private fun SettingsScreen(
                     .fillMaxWidth(0.9f)
                     .padding(bottom = 12.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFF0F0F0)
+                    containerColor = cardBackgroundColor
                 )
             ) {
                 Row(
@@ -786,7 +809,7 @@ private fun SettingsScreen(
                 ) {
                     Text(
                         text = "Koyu Tema",
-                        color = Color(0xFF2C4350),
+                        color = textColor,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -809,7 +832,7 @@ private fun SettingsScreen(
                     .fillMaxWidth(0.9f)
                     .padding(bottom = 20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFF0F0F0)
+                    containerColor = cardBackgroundColor
                 )
             ) {
                 Row(
@@ -821,7 +844,7 @@ private fun SettingsScreen(
                 ) {
                     Text(
                         text = "Ses Efektleri",
-                        color = Color(0xFF2C4350),
+                        color = textColor,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
                     )
