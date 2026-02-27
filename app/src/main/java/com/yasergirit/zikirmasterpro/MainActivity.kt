@@ -146,7 +146,7 @@ private fun CounterScreen(activity: android.app.Activity) {
         SettingsScreen(
             onBack = { showSettingsScreen = false },
             onDeleteAll = { showDeleteAllConfirm = true },
-            savedCountersCount = savedCounters.size
+            savedCounters = savedCounters
         )
     } else {
         // Main Screen
@@ -499,8 +499,58 @@ private fun CounterScreen(activity: android.app.Activity) {
 private fun SettingsScreen(
     onBack: () -> Unit,
     onDeleteAll: () -> Unit,
-    savedCountersCount: Int
+    savedCounters: List<CounterSave>
 ) {
+    // İstatistik hesaplama
+    val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR"))
+    val calendar = Calendar.getInstance()
+    val today = Calendar.getInstance()
+    
+    // Bugün
+    val todayCount = savedCounters.count { counter ->
+        try {
+            val counterDate = dateFormat.parse(counter.timestamp)
+            if (counterDate != null) {
+                calendar.time = counterDate
+                calendar.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
+                calendar.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)
+            } else false
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    // Bu hafta
+    val weekStart = Calendar.getInstance()
+    weekStart.set(Calendar.DAY_OF_WEEK, weekStart.firstDayOfWeek)
+    weekStart.set(Calendar.HOUR_OF_DAY, 0)
+    weekStart.set(Calendar.MINUTE, 0)
+    weekStart.set(Calendar.SECOND, 0)
+    
+    val weekCount = savedCounters.count { counter ->
+        try {
+            val counterDate = dateFormat.parse(counter.timestamp)
+            counterDate != null && counterDate.after(weekStart.time)
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    // Bu ay
+    val monthStart = Calendar.getInstance()
+    monthStart.set(Calendar.DAY_OF_MONTH, 1)
+    monthStart.set(Calendar.HOUR_OF_DAY, 0)
+    monthStart.set(Calendar.MINUTE, 0)
+    monthStart.set(Calendar.SECOND, 0)
+    
+    val monthCount = savedCounters.count { counter ->
+        try {
+            val counterDate = dateFormat.parse(counter.timestamp)
+            counterDate != null && counterDate.after(monthStart.time)
+        } catch (e: Exception) {
+            false
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -535,8 +585,87 @@ private fun SettingsScreen(
                 color = Color(0xFF2C4350),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 40.dp)
+                modifier = Modifier.padding(bottom = 20.dp)
             )
+
+            // İstatistikler
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(bottom = 20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF0F0F0)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "İstatistikler",
+                        color = Color(0xFF2C4350),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "$todayCount",
+                                color = Color(0xFF1A4D2E),
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Bugün",
+                                color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                                fontSize = 12.sp
+                            )
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "$weekCount",
+                                color = Color(0xFF1A4D2E),
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Bu Hafta",
+                                color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                                fontSize = 12.sp
+                            )
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "$monthCount",
+                                color = Color(0xFF1A4D2E),
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Bu Ay",
+                                color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        text = "Toplam Kayıt: ${savedCounters.size}",
+                        color = Color(0xFF2C4350).copy(alpha = 0.7f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
 
             // Delete All Button
             Button(
@@ -551,13 +680,6 @@ private fun SettingsScreen(
                 Text("Tüm Kayıtları Sil", color = Color.White, fontSize = 16.sp)
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Kaydedilen Zikir: $savedCountersCount",
-                color = Color(0xFF2C4350).copy(alpha = 0.7f),
-                fontSize = 12.sp
-            )
         }
     }
 }
