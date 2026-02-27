@@ -1,10 +1,13 @@
 package com.yasergirit.zikirmasterpro
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
+import android.os.Build
 import android.annotation.TargetApi
 import android.app.Activity
 import android.os.Vibrator
@@ -12,6 +15,8 @@ import android.os.VibrationEffect
 import android.media.AudioManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -54,7 +59,12 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 import kotlin.random.Random
+import androidx.work.WorkManager
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.ExistingPeriodicWorkPolicy
+import java.util.Calendar as JavaCalendar
 
 data class CounterSave(
     val value: Int,
@@ -64,13 +74,72 @@ data class CounterSave(
 private val Context.dataStore by preferencesDataStore(name = "counter_data")
 
 class MainActivity : ComponentActivity() {
+    
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            scheduleDailyQuote()
+        }
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Bildirim izni kontrolü ve günlük ayet planlaması
+        checkNotificationPermissionAndSchedule()
+        
         setContent {
             ZikirMasterProTheme {
                 CounterScreen(this)
             }
         }
+    }
+    
+    private fun checkNotificationPermissionAndSchedule() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            when {
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED -> {
+                    scheduleDailyQuote()
+                }
+                else -> {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        } else {
+            scheduleDailyQuote()
+        }
+    }
+    
+    private fun scheduleDailyQuote() {
+        val currentTime = JavaCalendar.getInstance()
+        val targetTime = JavaCalendar.getInstance().apply {
+            set(JavaCalendar.HOUR_OF_DAY, 20)
+            set(JavaCalendar.MINUTE, 0)
+            set(JavaCalendar.SECOND, 0)
+            set(JavaCalendar.MILLISECOND, 0)
+            
+            // Eğer saat 20:00 geçtiyse, yarına ayarla
+            if (before(currentTime)) {
+                add(JavaCalendar.DAY_OF_MONTH, 1)
+            }
+        }
+        
+        val delay = targetTime.timeInMillis - currentTime.timeInMillis
+        
+        val dailyWorkRequest = PeriodicWorkRequestBuilder<DailyQuoteWorker>(
+            24, TimeUnit.HOURS
+        ).setInitialDelay(delay, TimeUnit.MILLISECONDS)
+            .build()
+        
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "daily_quote_work",
+            ExistingPeriodicWorkPolicy.KEEP,
+            dailyWorkRequest
+        )
     }
 }
 
@@ -600,8 +669,8 @@ private fun SettingsScreen(
     fun t(tr: String, en: String) = if (selectedLanguage == "en") en else tr
     // İstatistik hesaplama
     val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", if (selectedLanguage == "en") Locale.US else Locale("tr", "TR"))
-    val calendar = Calendar.getInstance()
-    val today = Calendar.getInstance()
+    val calendar = JavaCalendar.getInstance()
+    val today = JavaCalendar.getInstance()
     
     // Bugün
     val todayCount = savedCounters.count { counter ->
@@ -609,8 +678,8 @@ private fun SettingsScreen(
             val counterDate = dateFormat.parse(counter.timestamp)
             if (counterDate != null) {
                 calendar.time = counterDate
-                calendar.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
-                calendar.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)
+                calendar.get(JavaCalendar.YEAR) == today.get(JavaCalendar.YEAR) &&
+                calendar.get(JavaCalendar.DAY_OF_YEAR) == today.get(JavaCalendar.DAY_OF_YEAR)
             } else false
         } catch (e: Exception) {
             false
@@ -618,11 +687,11 @@ private fun SettingsScreen(
     }
     
     // Bu hafta
-    val weekStart = Calendar.getInstance()
-    weekStart.set(Calendar.DAY_OF_WEEK, weekStart.firstDayOfWeek)
-    weekStart.set(Calendar.HOUR_OF_DAY, 0)
-    weekStart.set(Calendar.MINUTE, 0)
-    weekStart.set(Calendar.SECOND, 0)
+    val weekStart = JavaCalendar.getInstance()
+    weekStart.set(JavaCalendar.DAY_OF_WEEK, weekStart.firstDayOfWeek)
+    weekStart.set(JavaCalendar.HOUR_OF_DAY, 0)
+    weekStart.set(JavaCalendar.MINUTE, 0)
+    weekStart.set(JavaCalendar.SECOND, 0)
     
     val weekCount = savedCounters.count { counter ->
         try {
@@ -634,11 +703,11 @@ private fun SettingsScreen(
     }
     
     // Bu ay
-    val monthStart = Calendar.getInstance()
-    monthStart.set(Calendar.DAY_OF_MONTH, 1)
-    monthStart.set(Calendar.HOUR_OF_DAY, 0)
-    monthStart.set(Calendar.MINUTE, 0)
-    monthStart.set(Calendar.SECOND, 0)
+    val monthStart = JavaCalendar.getInstance()
+    monthStart.set(JavaCalendar.DAY_OF_MONTH, 1)
+    monthStart.set(JavaCalendar.HOUR_OF_DAY, 0)
+    monthStart.set(JavaCalendar.MINUTE, 0)
+    monthStart.set(JavaCalendar.SECOND, 0)
     
     val monthCount = savedCounters.count { counter ->
         try {
