@@ -9,6 +9,8 @@ import android.annotation.TargetApi
 import android.app.Activity
 import android.os.Vibrator
 import android.os.VibrationEffect
+import android.media.ToneGenerator
+import android.media.AudioManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -356,6 +358,16 @@ private fun CounterScreen(activity: android.app.Activity) {
                         } else {
                             @Suppress("DEPRECATION")
                             vibrator.vibrate(50)
+                        }
+                        // Ses efekti
+                        try {
+                            val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                            toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                toneGenerator.release()
+                            }, 150)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
