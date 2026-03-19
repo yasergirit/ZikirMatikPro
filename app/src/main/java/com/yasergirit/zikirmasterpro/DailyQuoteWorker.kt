@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
@@ -108,8 +109,12 @@ class DailyQuoteWorker(
             }
         }
 
+        val largeIcon = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher_foreground)
+            ?: BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.star_on)
+            .setSmallIcon(R.drawable.ic_notif)
+            .setLargeIcon(largeIcon)
             .setContentTitle("Günün Ayeti")
             .setContentText(quote)
             .setStyle(NotificationCompat.BigTextStyle().bigText(quote))

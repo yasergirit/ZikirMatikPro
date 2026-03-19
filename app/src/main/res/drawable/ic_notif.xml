@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Tesbih halkasi -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M54,24a26,26 0 1,0 0,52a26,26 0 1,0 0,-52" />
+
+    <!-- Stilize 'S' -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,40c4,-6 12,-8 18,-5c5,2 7,7 5,11c-2,4 -6,5 -11,6c-4,1 -7,2 -8,4c-1,2 0,4 2,5c3,2 7,1 9,-2l6,3c-3,6 -10,9 -17,7c-6,-2 -9,-7 -8,-12c1,-5 5,-8 11,-10c4,-1 7,-2 8,-4c1,-2 0,-4 -2,-5c-3,-2 -7,-1 -9,2z" />
+</vector>
