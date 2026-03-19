@@ -59,7 +59,7 @@ private val onboardingPages = listOf(
         emoji = "🕌",
         titleTr = "Günlük Hatırlatma",
         titleEn = "Daily Reminder",
-        descriptionTr = "Her gün saat 20:00'de güzel bir ayet bildirimi alın. Manevi dünyanızı zenginleştirin.",
+        descriptionTr = "Her gün ayet bildirimleri alın. Manevi dünyanızı zenginleştirin.",
         descriptionEn = "Receive a beautiful verse notification every day at 8:00 PM. Enrich your spiritual world."
     )
 )

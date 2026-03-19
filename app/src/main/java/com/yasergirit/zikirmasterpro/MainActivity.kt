@@ -11,6 +11,7 @@ import android.app.Activity
 import android.os.Vibrator
 import android.os.VibrationEffect
 import android.media.AudioManager
+import android.media.MediaPlayer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,17 +85,18 @@ data class DhikrType(
     val nameTr: String,
     val nameEn: String,
     val arabicText: String,
-    val defaultTarget: Int
+    val defaultTarget: Int,
+    val soundResId: Int? = null
 )
 
 private val dhikrTypes = listOf(
     DhikrType("Serbest Sayaç", "Free Counter", "", 0),
-    DhikrType("Sübhanallah", "SubhanAllah", "سُبْحَانَ ٱللَّٰهِ", 33),
-    DhikrType("Elhamdülillah", "Alhamdulillah", "ٱلْحَمْدُ لِلَّٰهِ", 33),
-    DhikrType("Allahu Ekber", "Allahu Akbar", "ٱللَّٰهُ أَكْبَرُ", 33),
-    DhikrType("Lâ ilâhe illallah", "La ilaha illallah", "لَا إِلَٰهَ إِلَّا ٱللَّٰهُ", 100),
-    DhikrType("Estağfirullah", "Astaghfirullah", "أَسْتَغْفِرُ ٱللَّٰهَ", 100),
-    DhikrType("Salavat", "Salawat", "ٱللَّٰهُمَّ صَلِّ عَلَىٰ مُحَمَّدٍ", 100),
+    DhikrType("Sübhanallah", "SubhanAllah", "سُبْحَانَ ٱللَّٰهِ", 33, R.raw.subhanallah),
+    DhikrType("Elhamdülillah", "Alhamdulillah", "ٱلْحَمْدُ لِلَّٰهِ", 33, R.raw.elhamdulillah),
+    DhikrType("Allahu Ekber", "Allahu Akbar", "ٱللَّٰهُ أَكْبَرُ", 33, R.raw.allahuekber),
+    DhikrType("Lâ ilâhe illallah", "La ilaha illallah", "لَا إِلَٰهَ إِلَّا ٱللَّٰهُ", 100, R.raw.lailaheillallah),
+    DhikrType("Estağfirullah", "Astaghfirullah", "أَسْتَغْفِرُ ٱللَّٰهَ", 100, R.raw.estagfirullah),
+    DhikrType("Salavat", "Salawat", "ٱللَّٰهُمَّ صَلِّ عَلَىٰ مُحَمَّدٍ", 100, R.raw.salavat),
 )
 
 internal val Context.dataStore by preferencesDataStore(name = "counter_data")
@@ -552,9 +554,11 @@ private fun CounterScreen(activity: android.app.Activity) {
                             arabicText = selectedDhikr.arabicText,
                             target = target,
                             isSoundEnabled = isSoundEnabled,
+                            onSoundEnabledChange = { isSoundEnabled = it; saveSoundEnabledToDataStore(context, it) },
                             isVibrationEnabled = isVibrationEnabled,
                             isDarkTheme = isDarkTheme,
                             selectedLanguage = selectedLanguage,
+                            selectedDhikrIndex = selectedDhikrIndex,
                             onSave = {
                                 val timestamp = dateFormat.format(Date())
                                 savedCounters = savedCounters + CounterSave(count, timestamp, dhikrName)
@@ -811,9 +815,11 @@ private fun CounterTab(
     arabicText: String,
     target: Int,
     isSoundEnabled: Boolean,
+    onSoundEnabledChange: (Boolean) -> Unit,
     isVibrationEnabled: Boolean,
     isDarkTheme: Boolean,
     selectedLanguage: String,
+    selectedDhikrIndex: Int,
     onSave: () -> Unit,
     onPickDhikr: () -> Unit,
     context: android.content.Context
@@ -825,6 +831,14 @@ private fun CounterTab(
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val tertiary = MaterialTheme.colorScheme.tertiary
     val bg = MaterialTheme.colorScheme.background
+
+    // MediaPlayer for dhikr sounds
+    val currentMediaPlayer = remember { mutableStateOf<MediaPlayer?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            currentMediaPlayer.value?.release()
+        }
+    }
 
     val progress = if (target > 0) (count.toFloat() / target).coerceAtMost(1f) else 0f
     val animatedProgress by animateFloatAsState(
@@ -894,7 +908,10 @@ private fun CounterTab(
 
         Spacer(modifier = Modifier.weight(0.3f))
 
-        // ── Progress Ring + Counter ──
+        // ── Progress Ring + Counter + ON/OFF toggle ──
+        Box(
+            contentAlignment = Alignment.Center
+        ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
@@ -916,8 +933,18 @@ private fun CounterTab(
                     }
                     if (isSoundEnabled) {
                         try {
-                            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                            am.playSoundEffect(AudioManager.FX_KEY_CLICK)
+                            val dhikr = dhikrTypes.getOrElse(selectedDhikrIndex) { dhikrTypes[0] }
+                            val resId = dhikr.soundResId
+                            if (resId != null) {
+                                currentMediaPlayer.value?.release()
+                                val mp = MediaPlayer.create(context, resId)
+                                mp?.setOnCompletionListener { it.release() }
+                                mp?.start()
+                                currentMediaPlayer.value = mp
+                            } else {
+                                val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                                am.playSoundEffect(AudioManager.FX_KEY_CLICK)
+                            }
                         } catch (_: Exception) {}
                     }
                 }
@@ -972,6 +999,56 @@ private fun CounterTab(
                 }
             }
         }
+
+            // ON/OFF Sound Toggle - sağ üst köşe
+            val toggleBg = if (isDarkTheme) surfaceVariant else Color(0xFFE0E0E0)
+            val toggleTextColor = if (isDarkTheme) Color.White else Color(0xFF212121)
+            Surface(
+                onClick = { onSoundEnabledChange(!isSoundEnabled) },
+                shape = RoundedCornerShape(20.dp),
+                color = toggleBg,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 20.dp, y = (-10).dp)
+                    .height(34.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    if (isSoundEnabled) {
+                        Text(
+                            text = t("Açık", "ON"),
+                            color = toggleTextColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(primary)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(ErrorRed)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = t("Kapalı", "OFF"),
+                            color = toggleTextColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        } // outer Box end
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -1393,6 +1470,7 @@ private fun SettingsTab(
 
         // ── Namaz Vakti Bildirimleri ──
         var prayerNotifEnabled by remember { mutableStateOf(false) }
+        var ezanSoundEnabled by remember { mutableStateOf(true) }
         var prayerFajr by remember { mutableStateOf(true) }
         var prayerSunrise by remember { mutableStateOf(false) }
         var prayerDhuhr by remember { mutableStateOf(true) }
@@ -1403,6 +1481,7 @@ private fun SettingsTab(
         // Load prayer prefs
         LaunchedEffect(Unit) {
             prayerNotifEnabled = loadBooleanPref(context, "prayer_notif_enabled", false)
+            ezanSoundEnabled = loadBooleanPref(context, "ezan_sound_enabled", true)
             prayerFajr = loadBooleanPref(context, "prayer_notif_fajr", true)
             prayerSunrise = loadBooleanPref(context, "prayer_notif_sunrise", false)
             prayerDhuhr = loadBooleanPref(context, "prayer_notif_dhuhr", true)
@@ -1457,6 +1536,44 @@ private fun SettingsTab(
             }
 
             if (prayerNotifEnabled) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
+
+                // Ezan Sesi toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(
+                            t("Ezan Sesi", "Adhan Sound"),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = onSurface
+                        )
+                        Text(
+                            t("Ayasofya ezan sesi", "Hagia Sophia adhan"),
+                            fontSize = 11.sp,
+                            color = onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = ezanSoundEnabled,
+                        onCheckedChange = {
+                            ezanSoundEnabled = it
+                            saveBooleanPref(context, "ezan_sound_enabled", it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = primary,
+                            uncheckedThumbColor = onSurfaceVariant,
+                            uncheckedTrackColor = surfaceVariant
+                        )
+                    )
+                }
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
 
                 data class PrayerToggle(val key: String, val nameTr: String, val nameEn: String, val value: Boolean, val onChange: (Boolean) -> Unit)

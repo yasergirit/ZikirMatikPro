@@ -9,6 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
@@ -189,15 +192,38 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
     private fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ezanUri = Uri.parse("android.resource://${context.packageName}/${R.raw.ezan}")
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
             val name = "Namaz Vakitleri"
             val descriptionText = "Namaz vakti bildirimleri"
             val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText
                 enableVibration(true)
+                setSound(ezanUri, audioAttributes)
             }
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun playEzan(context: Context) {
+        try {
+            val isEzanEnabled = try {
+                val key = androidx.datastore.preferences.core.booleanPreferencesKey("ezan_sound_enabled")
+                kotlinx.coroutines.runBlocking {
+                    context.dataStore.data.first()[key] ?: true
+                }
+            } catch (e: Exception) { true }
+
+            if (!isEzanEnabled) return
+
+            EzanService.start(context)
+        } catch (e: Exception) {
+            Log.e("PrayerAlarmReceiver", "Ezan service start error", e)
         }
     }
 
@@ -209,10 +235,15 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             ) return
         }
 
+        // Ezan sesini çal
+        playEzan(context)
+
         val title = "$prayerName Vakti"
         val text = if (prayerTime.isNotEmpty()) "$prayerName vakti girdi • $prayerTime" else "$prayerName vakti girdi"
         val largeIcon = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher_foreground)
             ?: BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+
+        val ezanUri = Uri.parse("android.resource://${context.packageName}/${R.raw.ezan}")
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notif)
@@ -221,7 +252,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setSound(ezanUri)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
 
         with(NotificationManagerCompat.from(context)) {
             notify(notificationId, builder.build())
