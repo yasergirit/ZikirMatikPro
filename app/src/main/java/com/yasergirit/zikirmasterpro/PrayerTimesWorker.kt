@@ -6,13 +6,20 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Location
 import android.location.LocationManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -81,7 +88,7 @@ class PrayerTimesWorker(
         }
     }
 
-    private fun getLastKnownLocation(): Pair<Double, Double>? {
+    private suspend fun getLastKnownLocation(): Pair<Double, Double>? {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED &&
             ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -91,30 +98,53 @@ class PrayerTimesWorker(
             return null
         }
 
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val fusedClient = LocationServices.getFusedLocationProviderClient(context)
 
-        // GPS'ten dene
-        val gpsLocation = try {
-            locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+        // 1) Cache'li konum (hızlı)
+        val cachedLocation = try {
+            suspendCoroutine<Location?> { cont ->
+                fusedClient.lastLocation
+                    .addOnSuccessListener { loc -> cont.resume(loc) }
+                    .addOnFailureListener { cont.resume(null) }
+            }
         } catch (e: Exception) { null }
 
-        // Network'ten dene
-        val networkLocation = try {
+        // 2) LocationManager fallback
+        val fallbackLocation = cachedLocation ?: try {
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
             locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                ?: locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
         } catch (e: Exception) { null }
 
-        val location = gpsLocation ?: networkLocation
+        // 3) Aktif konum (yavaş, son çare)
+        val location = fallbackLocation ?: try {
+            suspendCoroutine<Location?> { cont ->
+                fusedClient.getCurrentLocation(
+                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                    CancellationTokenSource().token
+                ).addOnSuccessListener { loc -> cont.resume(loc) }
+                    .addOnFailureListener { cont.resume(null) }
+            }
+        } catch (e: Exception) { null }
+
         return if (location != null) Pair(location.latitude, location.longitude) else null
     }
 
-    private fun fetchPrayerTimes(lat: Double, lng: Double): Map<String, String>? {
+    private suspend fun getStringPref(key: String, default: String): String {
         return try {
-            val timestamp = System.currentTimeMillis() / 1000
-            val url = "https://api.aladhan.com/v1/timings/$timestamp?latitude=$lat&longitude=$lng&method=13"
+            val prefKey = stringPreferencesKey(key)
+            context.dataStore.data.first()[prefKey] ?: default
+        } catch (e: Exception) { default }
+    }
+
+    private suspend fun fetchPrayerTimes(lat: Double, lng: Double): Map<String, String>? {
+        val method = getStringPref("prayer_method", "13")
+        return try {
+            val url = "https://islamicapi.com/api/v1/prayer-time/?lat=$lat&lon=$lng&method=$method&school=1&api_key=9ych8xGEPXNqi1SQHny2zXBJK34Jym1FAPdOpp7HLyW6qYgZ"
 
             val client = OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(8, TimeUnit.SECONDS)
+                .readTimeout(8, TimeUnit.SECONDS)
                 .build()
 
             val request = Request.Builder().url(url).build()
@@ -123,7 +153,7 @@ class PrayerTimesWorker(
 
             if (response.isSuccessful && body != null) {
                 val json = JSONObject(body)
-                val timings = json.getJSONObject("data").getJSONObject("timings")
+                val timings = json.getJSONObject("data").getJSONObject("times")
 
                 mapOf(
                     "Fajr" to timings.getString("Fajr"),
@@ -220,44 +250,12 @@ class PrayerTimesWorker(
                     )
                 }
                 Log.d(TAG, "${prayer.nameTr} alarm set for $timeStr")
-
-                // Öğle vaktinden 3 saniye sonra ayet/hadis bildirimi kur
-                if (prayer.apiKey == "Dhuhr") {
-                    scheduleQuoteAlarm(alarmManager, calendar.timeInMillis + 3000)
-                }
             } catch (e: SecurityException) {
                 Log.e(TAG, "Cannot schedule exact alarm for ${prayer.nameTr}", e)
                 alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent
                 )
             }
-        }
-    }
-
-    private fun scheduleQuoteAlarm(alarmManager: AlarmManager, triggerAtMillis: Long) {
-        val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
-            putExtra(PrayerAlarmReceiver.EXTRA_IS_QUOTE, true)
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            PrayerAlarmReceiver.NOTIF_ID_QUOTE,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (alarmManager.canScheduleExactAlarms()) {
-                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                } else {
-                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                }
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            }
-            Log.d(TAG, "Quote alarm set for 3s after Dhuhr")
-        } catch (e: SecurityException) {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
         }
     }
 

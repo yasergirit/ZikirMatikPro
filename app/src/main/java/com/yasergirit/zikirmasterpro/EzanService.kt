@@ -29,6 +29,10 @@ class EzanService : Service() {
                 context.startService(intent)
             }
         }
+
+        fun stop(context: Context) {
+            context.stopService(Intent(context, EzanService::class.java))
+        }
     }
 
     private var mediaPlayer: MediaPlayer? = null

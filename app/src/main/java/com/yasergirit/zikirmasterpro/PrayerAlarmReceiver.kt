@@ -71,26 +71,20 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 2000)
 
         createNotificationChannel(context)
-        showNotification(context, prayerName, prayerTime, notificationId)
 
-        // Öğle vaktinde 3 saniye sonra ayet/hadis bildirimi gönder
-        if (prayerName == "Öğle" && isQuoteEnabled(context)) {
-            val pendingResult = goAsync()
-            Thread {
-                try {
-                    Thread.sleep(3000)
-                    val quote = fetchQuote()
-                    if (quote != null) {
-                        createQuoteChannel(context)
-                        showQuoteNotification(context, quote)
-                    }
-                } catch (e: Exception) {
-                    Log.e("PrayerAlarmReceiver", "Quote fetch error after Dhuhr", e)
-                } finally {
-                    pendingResult.finish()
-                }
-            }.start()
-        }
+        // Önce bildirimi göster, sonra arka planda ayet çekip güncelle
+        val pendingResult = goAsync()
+        Thread {
+            try {
+                val quote = fetchQuote()
+                showNotification(context, prayerName, prayerTime, notificationId, quote)
+            } catch (e: Exception) {
+                Log.e("PrayerAlarmReceiver", "Notification error", e)
+                showNotification(context, prayerName, prayerTime, notificationId, null)
+            } finally {
+                pendingResult.finish()
+            }
+        }.start()
     }
 
     private fun isQuoteEnabled(context: Context): Boolean {
@@ -227,7 +221,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun showNotification(context: Context, prayerName: String, prayerTime: String, notificationId: Int) {
+    private fun showNotification(context: Context, prayerName: String, prayerTime: String, notificationId: Int, quote: Pair<String, String>?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ActivityCompat.checkSelfPermission(
                     context, Manifest.permission.POST_NOTIFICATIONS
@@ -238,22 +232,36 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         // Ezan sesini çal
         playEzan(context)
 
-        val title = "$prayerName Vakti"
-        val text = if (prayerTime.isNotEmpty()) "$prayerName vakti girdi • $prayerTime" else "$prayerName vakti girdi"
+        val title = if (prayerTime.isNotEmpty()) "$prayerTime $prayerName Vakti" else "$prayerName Vakti"
         val largeIcon = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher_foreground)
             ?: BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
 
         val ezanUri = Uri.parse("android.resource://${context.packageName}/${R.raw.ezan}")
 
+        val contentText = if (quote != null) {
+            quote.first
+        } else {
+            "$prayerName vakti girdi"
+        }
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notif)
             .setLargeIcon(largeIcon)
             .setContentTitle(title)
-            .setContentText(text)
+            .setContentText(contentText)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setSound(ezanUri)
             .setVibrate(longArrayOf(0, 500, 200, 500))
+
+        if (quote != null) {
+            builder.setStyle(
+                NotificationCompat.BigTextStyle()
+                    .setBigContentTitle(title)
+                    .bigText(quote.first)
+                    .setSummaryText(quote.second)
+            )
+        }
 
         with(NotificationManagerCompat.from(context)) {
             notify(notificationId, builder.build())

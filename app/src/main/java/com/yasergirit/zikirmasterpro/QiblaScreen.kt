@@ -77,7 +77,9 @@ fun QiblaTab(
     isDarkTheme: Boolean,
     selectedLanguage: String
 ) {
-    fun t(tr: String, en: String) = if (selectedLanguage == "en") en else tr
+    fun t(tr: String, en: String, de: String = "", ar: String = "") = when (selectedLanguage) {
+        "en" -> en; "de" -> de.ifEmpty { en }; "ar" -> ar.ifEmpty { en }; else -> tr
+    }
 
     val context = LocalContext.current
     val primary = MaterialTheme.colorScheme.primary
@@ -263,7 +265,7 @@ fun QiblaTab(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = t("Kıble Pusulası", "Qibla Compass"),
+            text = t("Kıble Pusulası", "Qibla Compass", "Qibla-Kompass", "بوصلة القبلة"),
             modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 4.dp),
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
@@ -276,7 +278,7 @@ fun QiblaTab(
             Text("🧭", fontSize = 56.sp)
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                t("Bu cihazda pusula sensörü bulunamadı.", "Compass sensor not found on this device."),
+                t("Bu cihazda pusula sensörü bulunamadı.", "Compass sensor not found on this device.", "Kompasssensor auf diesem Gerät nicht gefunden.", "لم يتم العثور على مستشعر البوصلة."),
                 color = onSurfaceVariant,
                 fontSize = 16.sp,
                 textAlign = TextAlign.Center,
@@ -289,7 +291,7 @@ fun QiblaTab(
             Text("📍", fontSize = 56.sp)
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                t("Kıble yönünü hesaplamak için konum iznine ihtiyaç var.", "Location permission is required to calculate Qibla direction."),
+                t("Kıble yönünü hesaplamak için konum iznine ihtiyaç var.", "Location permission is required to calculate Qibla direction.", "Standortberechtigung wird für die Qibla-Berechnung benötigt.", "إذن الموقع مطلوب لحساب اتجاه القبلة."),
                 color = onSurfaceVariant,
                 fontSize = 16.sp,
                 textAlign = TextAlign.Center,
@@ -304,7 +306,7 @@ fun QiblaTab(
                     )
                 )
             }) {
-                Text(t("İzin Ver", "Grant Permission"))
+                Text(t("İzin Ver", "Grant Permission", "Erlauben", "منح الإذن"))
             }
             Spacer(modifier = Modifier.weight(1f))
         } else {
@@ -372,21 +374,21 @@ fun QiblaTab(
                 ) {
                     if (isPointingQibla) {
                         Text(
-                            text = t("Kıble Yönündesiniz ✓", "Facing Qibla ✓"),
+                            text = t("Kıble Yönündesiniz ✓", "Facing Qibla ✓", "Qibla-Richtung ✓", "أنت في اتجاه القبلة ✓"),
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             color = Gold
                         )
                     } else if (hasLocation) {
                         Text(
-                            text = t("Kıble Yönü: ${qiblaDegree.toInt()}°", "Qibla Direction: ${qiblaDegree.toInt()}°"),
+                            text = t("Kıble Yönü: ${qiblaDegree.toInt()}°", "Qibla Direction: ${qiblaDegree.toInt()}°", "Qibla-Richtung: ${qiblaDegree.toInt()}°", "اتجاه القبلة: ${qiblaDegree.toInt()}°"),
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 16.sp,
                             color = onSurface
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = t("Cihazı Kıble yönüne çevirin", "Turn device toward Qibla"),
+                            text = t("Cihazı Kıble yönüne çevirin", "Turn device toward Qibla", "Gerät Richtung Qibla drehen", "وجّه الجهاز نحو القبلة"),
                             fontSize = 13.sp,
                             color = onSurfaceVariant
                         )
@@ -398,7 +400,7 @@ fun QiblaTab(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = t("Konum alınıyor...", "Getting location..."),
+                            text = t("Konum alınıyor...", "Getting location...", "Standort wird ermittelt...", "جاري تحديد الموقع..."),
                             fontSize = 14.sp,
                             color = onSurfaceVariant
                         )
