@@ -60,15 +60,26 @@ fun OnboardingScreen(
         )
     }
 
+    var showNotificationSettings by remember { mutableStateOf(false) }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (locationGranted) onFinish()
+        if (locationGranted) showNotificationSettings = true
     }
 
     var agreedToTerms by remember { mutableStateOf(true) }
+
+    // Konum izni verildiyse bildirim ayarları ekranını göster
+    if (showNotificationSettings) {
+        NotificationSettingsScreen(
+            selectedLanguage = selectedLanguage,
+            onFinish = onFinish
+        )
+        return
+    }
 
     Box(
         modifier = Modifier
@@ -225,7 +236,7 @@ fun OnboardingScreen(
                     Button(
                         onClick = {
                             if (locationGranted) {
-                                onFinish()
+                                showNotificationSettings = true
                             } else {
                                 locationPermissionLauncher.launch(
                                     arrayOf(

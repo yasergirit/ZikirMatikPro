@@ -33,6 +33,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         const val EXTRA_PRAYER_TIME = "prayer_time"
         const val EXTRA_NOTIFICATION_ID = "notification_id"
         const val EXTRA_IS_QUOTE = "is_quote"
+        const val EXTRA_IS_BEFORE = "is_before"
 
         // Notification ID'leri (her vakit için farklı)
         const val NOTIF_ID_FAJR = 2001
@@ -42,6 +43,14 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         const val NOTIF_ID_MAGHRIB = 2005
         const val NOTIF_ID_ISHA = 2006
         const val NOTIF_ID_QUOTE = 2010
+
+        // "Vakitten önce" notification ID'leri
+        const val NOTIF_ID_BEFORE_FAJR = 3001
+        const val NOTIF_ID_BEFORE_SUNRISE = 3002
+        const val NOTIF_ID_BEFORE_DHUHR = 3003
+        const val NOTIF_ID_BEFORE_ASR = 3004
+        const val NOTIF_ID_BEFORE_MAGHRIB = 3005
+        const val NOTIF_ID_BEFORE_ISHA = 3006
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -69,8 +78,15 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         val prayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: return
         val prayerTime = intent.getStringExtra(EXTRA_PRAYER_TIME) ?: ""
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 2000)
+        val isBefore = intent.getBooleanExtra(EXTRA_IS_BEFORE, false)
 
         createNotificationChannel(context)
+
+        if (isBefore) {
+            // "Vakitten önce" bildirimi - ezan yok, kısa bilgi
+            showBeforeNotification(context, prayerName, prayerTime, notificationId)
+            return
+        }
 
         // Önce bildirimi göster, sonra arka planda ayet çekip güncelle
         val pendingResult = goAsync()
@@ -218,6 +234,53 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             EzanService.start(context)
         } catch (e: Exception) {
             Log.e("PrayerAlarmReceiver", "Ezan service start error", e)
+        }
+    }
+
+    private fun showBeforeNotification(context: Context, prayerName: String, prayerTime: String, notificationId: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) return
+        }
+
+        // Dil tercihini oku
+        val lang = try {
+            val key = androidx.datastore.preferences.core.stringPreferencesKey("selected_language")
+            kotlinx.coroutines.runBlocking {
+                context.dataStore.data.first()[key] ?: "tr"
+            }
+        } catch (_: Exception) { "tr" }
+
+        val title = when (lang) {
+            "en" -> "30 minutes to $prayerName"
+            "de" -> "30 Minuten bis $prayerName"
+            "ar" -> "30 دقيقة حتى $prayerName"
+            else -> "$prayerName vaktine 30 dakika kaldı"
+        }
+
+        val body = when (lang) {
+            "en" -> "$prayerName prayer time is at $prayerTime"
+            "de" -> "$prayerName Gebetszeit ist um $prayerTime"
+            "ar" -> "وقت صلاة $prayerName في $prayerTime"
+            else -> "$prayerName vakti saat $prayerTime"
+        }
+
+        val largeIcon = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher_foreground)
+            ?: BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notif)
+            .setLargeIcon(largeIcon)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setVibrate(longArrayOf(0, 300))
+
+        with(NotificationManagerCompat.from(context)) {
+            notify(notificationId, builder.build())
         }
     }
 

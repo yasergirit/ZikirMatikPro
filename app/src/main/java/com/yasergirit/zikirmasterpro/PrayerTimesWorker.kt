@@ -189,6 +189,24 @@ class PrayerTimesWorker(
             PrayerInfo("Isha", "prayer_notif_isha", "Yatsı", PrayerAlarmReceiver.NOTIF_ID_ISHA),
         )
 
+        // "Vakitten önce" bildirimleri için eşleme
+        val beforeNotifIds = mapOf(
+            "Fajr" to PrayerAlarmReceiver.NOTIF_ID_BEFORE_FAJR,
+            "Sunrise" to PrayerAlarmReceiver.NOTIF_ID_BEFORE_SUNRISE,
+            "Dhuhr" to PrayerAlarmReceiver.NOTIF_ID_BEFORE_DHUHR,
+            "Asr" to PrayerAlarmReceiver.NOTIF_ID_BEFORE_ASR,
+            "Maghrib" to PrayerAlarmReceiver.NOTIF_ID_BEFORE_MAGHRIB,
+            "Isha" to PrayerAlarmReceiver.NOTIF_ID_BEFORE_ISHA,
+        )
+        val beforePrefKeys = mapOf(
+            "Fajr" to "prayer_notif_before_fajr",
+            "Sunrise" to "prayer_notif_before_sunrise",
+            "Dhuhr" to "prayer_notif_before_dhuhr",
+            "Asr" to "prayer_notif_before_asr",
+            "Maghrib" to "prayer_notif_before_maghrib",
+            "Isha" to "prayer_notif_before_isha",
+        )
+
         for (prayer in prayers) {
             val timeStr = prayerTimes[prayer.apiKey] ?: continue
             val enabled = getPref(prayer.prefKey, true)
@@ -256,6 +274,50 @@ class PrayerTimesWorker(
                     AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent
                 )
             }
+
+            // ── "Vakitten önce" alarm (30 dk önce) ──
+            val beforePrefKey = beforePrefKeys[prayer.apiKey]
+            val beforeNotifId = beforeNotifIds[prayer.apiKey]
+            if (beforePrefKey != null && beforeNotifId != null) {
+                val beforeEnabled = getPref(beforePrefKey, false)
+                val beforeIntent = Intent(context, PrayerAlarmReceiver::class.java).apply {
+                    putExtra(PrayerAlarmReceiver.EXTRA_PRAYER_NAME, prayer.nameTr)
+                    putExtra(PrayerAlarmReceiver.EXTRA_PRAYER_TIME, timeStr)
+                    putExtra(PrayerAlarmReceiver.EXTRA_NOTIFICATION_ID, beforeNotifId)
+                    putExtra(PrayerAlarmReceiver.EXTRA_IS_BEFORE, true)
+                }
+                val beforePendingIntent = PendingIntent.getBroadcast(
+                    context, beforeNotifId, beforeIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                if (!beforeEnabled) {
+                    alarmManager.cancel(beforePendingIntent)
+                } else {
+                    val beforeCalendar = Calendar.getInstance().apply {
+                        timeInMillis = calendar.timeInMillis
+                        add(Calendar.MINUTE, -30) // 30 dakika önce
+                    }
+                    if (beforeCalendar.timeInMillis > System.currentTimeMillis()) {
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+                                alarmManager.setExactAndAllowWhileIdle(
+                                    AlarmManager.RTC_WAKEUP, beforeCalendar.timeInMillis, beforePendingIntent
+                                )
+                            } else {
+                                alarmManager.setAndAllowWhileIdle(
+                                    AlarmManager.RTC_WAKEUP, beforeCalendar.timeInMillis, beforePendingIntent
+                                )
+                            }
+                            Log.d(TAG, "${prayer.nameTr} BEFORE alarm set for 30min before $timeStr")
+                        } catch (e: SecurityException) {
+                            alarmManager.setAndAllowWhileIdle(
+                                AlarmManager.RTC_WAKEUP, beforeCalendar.timeInMillis, beforePendingIntent
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -268,6 +330,12 @@ class PrayerTimesWorker(
             PrayerAlarmReceiver.NOTIF_ID_ASR,
             PrayerAlarmReceiver.NOTIF_ID_MAGHRIB,
             PrayerAlarmReceiver.NOTIF_ID_ISHA,
+            PrayerAlarmReceiver.NOTIF_ID_BEFORE_FAJR,
+            PrayerAlarmReceiver.NOTIF_ID_BEFORE_SUNRISE,
+            PrayerAlarmReceiver.NOTIF_ID_BEFORE_DHUHR,
+            PrayerAlarmReceiver.NOTIF_ID_BEFORE_ASR,
+            PrayerAlarmReceiver.NOTIF_ID_BEFORE_MAGHRIB,
+            PrayerAlarmReceiver.NOTIF_ID_BEFORE_ISHA,
         )
         for (id in notifIds) {
             val intent = Intent(context, PrayerAlarmReceiver::class.java)

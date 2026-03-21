@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(adb devices:*)",
+      "Bash(ls gradlew*)",
+      "Read(//c/Users/e9280/AppData/Local/Android/Sdk/platform-tools/**)",
+      "Read(//c/Android/Sdk/platform-tools/**)",
+      "Read(//c/Users/e9280/AppData/Local/**)",
+      "Bash(cmd.exe /c \"where adb\")",
+      "Bash(./gradlew installDebug)",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''C:\\\\'' -Filter ''adb.exe'' -Recurse -ErrorAction SilentlyContinue -Force | Select-Object -First 3 -ExpandProperty FullName\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''C:\\\\Users'' -Directory -Filter ''Sdk'' -Recurse -Depth 5 -ErrorAction SilentlyContinue | Where-Object { \\(Test-Path \\(Join-Path $_.FullName ''platform-tools''\\)\\) } | Select-Object -First 3 -ExpandProperty FullName\")",
+      "Bash(powershell.exe -Command \"Get-ChildItem ''C:\\\\Users\\\\e9280\\\\AppData\\\\Local'' -Directory -ErrorAction SilentlyContinue | Select-Object Name\")",
+      "Bash(git status:*)",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''C:\\\\Program Files'',''C:\\\\Program Files \\(x86\\)'',''C:\\\\Users\\\\e9280'' -Filter ''adb.exe'' -Recurse -Depth 8 -ErrorAction SilentlyContinue | Select-Object -First 5 -ExpandProperty FullName\")",
+      "Read(//c/Program Files/Android/Android Studio/jbr/bin/**)",
+      "Read(//c/Program Files/Android/Android Studio/bin/**)",
+      "Read(//c/Program Files/Android/Android Studio/**)",
+      "Bash(find '/c/Program Files/Android/Android Studio' -name sdkmanager* -o -name cmdline-tools)",
+      "Bash(curl -L -o /tmp/cmdline-tools.zip \"https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip\")",
+      "Bash(unzip -o /tmp/cmdline-tools.zip -d .)",
+      "Bash(mv cmdline-tools:*)",
+      "Bash(export JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\")",
+      "Bash(\"C:/Users/e9280/AppData/Local/Android/Sdk/cmdline-tools/latest/bin/sdkmanager.bat\" --sdk_root=\"C:\\\\Users\\\\e9280\\\\AppData\\\\Local\\\\Android\\\\Sdk\" \"platform-tools\" \"platforms;android-34\" \"build-tools;34.0.0\" --verbose)",
+      "Bash(yes)",
+      "Bash(\"C:/Users/e9280/AppData/Local/Android/Sdk/cmdline-tools/latest/bin/sdkmanager.bat\" --sdk_root=\"C:\\\\Users\\\\e9280\\\\AppData\\\\Local\\\\Android\\\\Sdk\" --licenses)",
+      "Bash(\"C:/Users/e9280/AppData/Local/Android/Sdk/cmdline-tools/latest/bin/sdkmanager.bat\" --sdk_root=\"C:\\\\Users\\\\e9280\\\\AppData\\\\Local\\\\Android\\\\Sdk\" \"platform-tools\" \"platforms;android-34\" \"build-tools;34.0.0\")"
+    ]
+  }
+}
