@@ -1,18 +1,13 @@
-@file:OptIn(ExperimentalFoundationApi::class)
-
 package com.yasergirit.zikirmasterpro
 
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -20,90 +15,36 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import com.yasergirit.zikirmasterpro.ui.theme.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.launch
+import com.yasergirit.zikirmasterpro.ui.theme.*
+import kotlin.math.sqrt
 
-data class OnboardingPage(
-    val emoji: String,
-    val titleTr: String,
-    val titleEn: String,
-    val titleDe: String = "",
-    val titleAr: String = "",
-    val descriptionTr: String,
-    val descriptionEn: String,
-    val descriptionDe: String = "",
-    val descriptionAr: String = ""
-)
-
-private val onboardingPages = listOf(
-    OnboardingPage(
-        emoji = "📿",
-        titleTr = "Zikir Sayacı",
-        titleEn = "Dhikr Counter",
-        titleDe = "Dhikr-Zähler",
-        titleAr = "عدّاد الأذكار",
-        descriptionTr = "Büyük sayaç butonuna dokunarak zikirlerinizi kolayca sayın. Her dokunuşta titreşim ve ses geri bildirimi alın.",
-        descriptionEn = "Easily count your dhikr by tapping the large counter button. Get vibration and sound feedback with each tap.",
-        descriptionDe = "Zählen Sie Ihre Dhikr einfach durch Tippen auf die große Zähltaste. Erhalten Sie bei jedem Tippen Vibrations- und Sound-Feedback.",
-        descriptionAr = "عدّ أذكارك بسهولة بالضغط على زر العداد الكبير. احصل على اهتزاز وصوت مع كل ضغطة."
-    ),
-    OnboardingPage(
-        emoji = "💾",
-        titleTr = "Kaydet ve Takip Et",
-        titleEn = "Save & Track",
-        titleDe = "Speichern & Verfolgen",
-        titleAr = "حفظ ومتابعة",
-        descriptionTr = "Zikir sayınızı kaydedin ve geçmiş kayıtlarınızı görüntüleyin. İstatistiklerinizi günlük, haftalık ve aylık olarak takip edin.",
-        descriptionEn = "Save your dhikr count and view your past records. Track your statistics daily, weekly, and monthly.",
-        descriptionDe = "Speichern Sie Ihre Dhikr-Zählung und sehen Sie Ihre vergangenen Einträge. Verfolgen Sie Ihre Statistiken täglich, wöchentlich und monatlich.",
-        descriptionAr = "احفظ عدد أذكارك واعرض سجلاتك السابقة. تابع إحصائياتك يومياً وأسبوعياً وشهرياً."
-    ),
-    OnboardingPage(
-        emoji = "⚙️",
-        titleTr = "Kişiselleştirin",
-        titleEn = "Customize",
-        titleDe = "Anpassen",
-        titleAr = "تخصيص",
-        descriptionTr = "Karanlık/aydınlık tema, ses efektleri, titreşim modu ve dil seçenekleriyle uygulamayı kendinize göre ayarlayın.",
-        descriptionEn = "Customize the app with dark/light theme, sound effects, vibration mode, and language options.",
-        descriptionDe = "Passen Sie die App mit Hell-/Dunkel-Design, Soundeffekten, Vibrationsmodus und Sprachoptionen an.",
-        descriptionAr = "خصّص التطبيق مع المظهر الداكن/الفاتح والمؤثرات الصوتية والاهتزاز وخيارات اللغة."
-    ),
-    OnboardingPage(
-        emoji = "🕌",
-        titleTr = "Günlük Hatırlatma",
-        titleEn = "Daily Reminder",
-        titleDe = "Tägliche Erinnerung",
-        titleAr = "تذكير يومي",
-        descriptionTr = "Namaz vakitlerinde bildirim alın, günlük ayet ve hadis okuyun.",
-        descriptionEn = "Get notified at prayer times, read daily verses and hadiths.",
-        descriptionDe = "Erhalten Sie Benachrichtigungen zu Gebetszeiten, lesen Sie tägliche Verse und Hadithe.",
-        descriptionAr = "احصل على إشعارات في أوقات الصلاة، اقرأ آيات وأحاديث يومية."
-    ),
-    OnboardingPage(
-        emoji = "📍",
-        titleTr = "Konum İzni",
-        titleEn = "Location Permission",
-        titleDe = "Standortberechtigung",
-        titleAr = "إذن الموقع",
-        descriptionTr = "Namaz vakitlerini ve kıble yönünü doğru gösterebilmemiz için konum bilginize ihtiyacımız var. Konum bilginiz yalnızca bu amaçla kullanılır.",
-        descriptionEn = "We need your location to show accurate prayer times and qibla direction. Your location is only used for this purpose.",
-        descriptionDe = "Wir benötigen Ihren Standort für genaue Gebetszeiten und die Qibla-Richtung. Ihr Standort wird nur für diesen Zweck verwendet.",
-        descriptionAr = "نحتاج إلى موقعك لعرض أوقات الصلاة واتجاه القبلة بدقة. يُستخدم موقعك لهذا الغرض فقط."
-    )
-)
+// Renkli geometrik desen renkleri
+private val PatternOrange = Color(0xFFE8734A)
+private val PatternTeal = Color(0xFF2AA9B0)
+private val PatternNavy = Color(0xFF1B2838)
+private val PatternPink = Color(0xFFE8A0B4)
+private val PatternYellow = Color(0xFFF5C842)
+private val PatternCoral = Color(0xFFE85D4A)
+private val PatternMint = Color(0xFF5CD6B8)
+private val PatternDarkTeal = Color(0xFF0E7C66)
 
 @Composable
 fun OnboardingScreen(
     selectedLanguage: String,
+    onLanguageChange: (String) -> Unit = {},
     onFinish: () -> Unit
 ) {
     fun t(tr: String, en: String, de: String = "", ar: String = "") = when (selectedLanguage) {
@@ -111,212 +52,297 @@ fun OnboardingScreen(
     }
 
     val context = LocalContext.current
-    val pagerState = rememberPagerState(pageCount = { onboardingPages.size })
-    val coroutineScope = rememberCoroutineScope()
-    val locationPageIndex = onboardingPages.size - 1
 
-    var locationGranted by remember { mutableStateOf(
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    ) }
+    var locationGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
+    }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+        locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        locationGranted = granted
+        if (locationGranted) onFinish()
     }
 
-    val isOnLocationPage = pagerState.currentPage == locationPageIndex
+    var agreedToTerms by remember { mutableStateOf(true) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        DarkBackground,
-                        EmeraldDark,
-                        DarkBackground
-                    )
-                )
-            )
+            .background(PatternNavy)
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Skip button
-            Row(
+        Column(modifier = Modifier.fillMaxSize()) {
+            // ── Üst: Geometrik desen ──
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.End
+                    .weight(0.38f)
             ) {
-                TextButton(onClick = onFinish) {
-                    Text(
-                        text = t("Atla", "Skip", "Überspringen", "تخطي"),
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 16.sp
-                    )
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawGeometricPattern()
                 }
             }
 
-            // Pager
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.weight(1f)
-            ) { page ->
-                val currentPage = onboardingPages[page]
+            // ── Alt: Beyaz kart ──
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.62f),
+                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                color = Color.White
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Emoji icon
-                    Text(
-                        text = currentPage.emoji,
-                        fontSize = 80.sp,
-                        modifier = Modifier.padding(bottom = 32.dp)
-                    )
+                    Spacer(modifier = Modifier.height(48.dp))
 
-                    // Title
+                    // Selam mesajı
                     Text(
-                        text = when (selectedLanguage) {
-                            "en" -> currentPage.titleEn
-                            "de" -> currentPage.titleDe.ifEmpty { currentPage.titleEn }
-                            "ar" -> currentPage.titleAr.ifEmpty { currentPage.titleEn }
-                            else -> currentPage.titleTr
-                        },
-                        color = Color.White,
+                        text = t("Es Selamu Aleyküm", "As Salaam Alaikum", "As Salaam Alaikum", "السلام عليكم"),
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        color = EmeraldDark,
+                        textAlign = TextAlign.Center
                     )
 
-                    // Description
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Uygulama ismi
                     Text(
-                        text = when (selectedLanguage) {
-                            "en" -> currentPage.descriptionEn
-                            "de" -> currentPage.descriptionDe.ifEmpty { currentPage.descriptionEn }
-                            "ar" -> currentPage.descriptionAr.ifEmpty { currentPage.descriptionEn }
-                            else -> currentPage.descriptionTr
-                        },
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 16.sp,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 24.sp
+                        text = "Sofi App",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color(0xFF333333),
+                        textAlign = TextAlign.Center
                     )
 
-                    // Location permission button on last page
-                    if (page == locationPageIndex) {
-                        Spacer(modifier = Modifier.height(32.dp))
-                        if (locationGranted) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Emerald.copy(alpha = 0.2f)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Text("✅", fontSize = 20.sp)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = t("Konum izni verildi", "Location permission granted", "Standortberechtigung erteilt", "تم منح إذن الموقع"),
-                                        color = EmeraldLight,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            }
-                        } else {
-                            Button(
-                                onClick = {
-                                    locationPermissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION
-                                        )
-                                    )
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
+                    Spacer(modifier = Modifier.height(36.dp))
+
+                    // Dil seçici (dropdown)
+                    var languageMenuExpanded by remember { mutableStateOf(false) }
+                    val languages = listOf(
+                        "tr" to "Türkçe",
+                        "en" to "English",
+                        "de" to "Deutsch",
+                        "ar" to "العربية"
+                    )
+
+                    Box {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { languageMenuExpanded = true },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFF2F2F2)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "📍  " + t("Konum İznini Ver", "Grant Location Access", "Standortzugriff erlauben", "منح إذن الموقع"),
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium
+                                    text = languages.firstOrNull { it.first == selectedLanguage }?.second ?: "Türkçe",
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF333333)
+                                )
+                                Text(
+                                    text = if (languageMenuExpanded) "‹" else "›",
+                                    fontSize = 24.sp,
+                                    color = Color(0xFF999999)
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = languageMenuExpanded,
+                            onDismissRequest = { languageMenuExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.7f)
+                        ) {
+                            languages.forEach { (code, label) ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = label,
+                                            fontWeight = if (code == selectedLanguage) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (code == selectedLanguage) Emerald else Color(0xFF333333)
+                                        )
+                                    },
+                                    onClick = {
+                                        onLanguageChange(code)
+                                        languageMenuExpanded = false
+                                    },
+                                    trailingIcon = {
+                                        if (code == selectedLanguage) {
+                                            Text("✓", color = Emerald, fontSize = 16.sp)
+                                        }
+                                    }
                                 )
                             }
                         }
                     }
-                }
-            }
 
-            // Page indicators
-            Row(
-                modifier = Modifier.padding(bottom = 24.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                repeat(onboardingPages.size) { index ->
-                    val isSelected = pagerState.currentPage == index
-                    val width by animateDpAsState(
-                        targetValue = if (isSelected) 24.dp else 8.dp,
-                        label = "indicator_width"
-                    )
-                    Box(
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Kullanım şartları onay
+                    Row(
                         modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .height(8.dp)
-                            .width(width)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSelected) EmeraldLight
-                                else EmeraldLight.copy(alpha = 0.4f)
+                            .fillMaxWidth()
+                            .padding(bottom = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = agreedToTerms,
+                            onCheckedChange = { agreedToTerms = it },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = Emerald,
+                                checkmarkColor = Color.White
                             )
-                    )
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = t(
+                                "Uygulamanın Kullanım Şartlarını ve Gizlilik Politikasını kabul ediyorum.",
+                                "I agree to the Terms of Use and the Privacy Policy of the Application.",
+                                "Ich stimme den Nutzungsbedingungen und der Datenschutzrichtlinie zu.",
+                                "أوافق على شروط الاستخدام وسياسة الخصوصية."
+                            ),
+                            fontSize = 13.sp,
+                            color = Color(0xFF666666),
+                            lineHeight = 18.sp
+                        )
+                    }
+
+                    // Konum butonu
+                    Button(
+                        onClick = {
+                            if (locationGranted) {
+                                onFinish()
+                            } else {
+                                locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            }
+                        },
+                        enabled = agreedToTerms,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Emerald,
+                            disabledContainerColor = Emerald.copy(alpha = 0.4f)
+                        )
+                    ) {
+                        Text(
+                            text = if (locationGranted)
+                                t("BAŞLA", "GET STARTED", "STARTEN", "ابدأ")
+                            else
+                                t("KONUMUMU BUL", "FIND MY LOCATION", "STANDORT FINDEN", "البحث عن موقعي"),
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
                 }
             }
-
-            // Next / Start button
-            Button(
-                onClick = {
-                    if (pagerState.currentPage == onboardingPages.size - 1) {
-                        onFinish()
-                    } else {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth(0.7f)
-                    .height(56.dp)
-                    .padding(bottom = 8.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Emerald
-                )
-            ) {
-                Text(
-                    text = if (isOnLocationPage)
-                        t("Başla", "Get Started", "Los geht's", "ابدأ")
-                    else
-                        t("İleri", "Next", "Weiter", "التالي"),
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
+}
+
+/**
+ * Canvas'a renkli İslami geometrik desen çizer.
+ * Görseldeki gibi daireler, kareler, elmaslar ve geometrik şekillerden oluşur.
+ */
+private fun DrawScope.drawGeometricPattern() {
+    val w = size.width
+    val h = size.height
+    val cellW = w / 5f
+    val cellH = h / 3f
+
+    // Arka plan
+    drawRect(PatternNavy)
+
+    // ── Satır 1 ──
+    // Büyük turuncu daire (sol üst)
+    drawCircle(PatternOrange, radius = cellW * 0.7f, center = Offset(cellW * 0.8f, cellH * 0.5f))
+    // Küçük beyaz hilal
+    drawCircle(Color.White, radius = cellW * 0.25f, center = Offset(cellW * 0.3f, cellH * 0.8f))
+    // Teal daire (orta)
+    drawCircle(PatternTeal, radius = cellW * 0.55f, center = Offset(cellW * 2f, cellH * 0.4f))
+    // Küçük turuncu daire (orta üst)
+    drawCircle(PatternOrange, radius = cellW * 0.2f, center = Offset(cellW * 2.8f, cellH * 0.2f))
+    // Coral dikdörtgen
+    drawRoundRect(PatternCoral, Offset(cellW * 3f, 0f), Size(cellW * 1.2f, cellH * 0.9f), CornerRadius(12f))
+    // Pembe kare (sağ)
+    drawRoundRect(PatternPink, Offset(cellW * 3.5f, cellH * 0.3f), Size(cellW * 0.6f, cellW * 0.6f), CornerRadius(8f))
+    // Sarı daire (sağ üst köşe)
+    drawCircle(PatternYellow, radius = cellW * 0.45f, center = Offset(w - cellW * 0.3f, cellH * 0.3f))
+    // Teal büyük daire (sağ üst)
+    drawCircle(PatternTeal, radius = cellW * 0.6f, center = Offset(w - cellW * 0.7f, cellH * 0.1f))
+
+    // ── Satır 2 ──
+    // Turuncu elmas (sol)
+    val diamondCx = cellW * 0.5f
+    val diamondCy = cellH * 1.5f
+    val dSize = cellW * 0.35f
+    drawPath(Path().apply {
+        moveTo(diamondCx, diamondCy - dSize)
+        lineTo(diamondCx + dSize, diamondCy)
+        lineTo(diamondCx, diamondCy + dSize)
+        lineTo(diamondCx - dSize, diamondCy)
+        close()
+    }, PatternOrange)
+    // Küçük beyaz elmas (sol iç)
+    val ds = dSize * 0.4f
+    drawPath(Path().apply {
+        moveTo(diamondCx, diamondCy - ds)
+        lineTo(diamondCx + ds, diamondCy)
+        lineTo(diamondCx, diamondCy + ds)
+        lineTo(diamondCx - ds, diamondCy)
+        close()
+    }, Color.White)
+
+    // Yeşil daire (sol-orta)
+    drawCircle(PatternDarkTeal, radius = cellW * 0.5f, center = Offset(cellW * 1.5f, cellH * 1.3f))
+    // Sarı daire (orta)
+    drawCircle(PatternYellow, radius = cellW * 0.55f, center = Offset(cellW * 2.5f, cellH * 1.5f))
+    // Turuncu daire (orta)
+    drawCircle(PatternOrange, radius = cellW * 0.35f, center = Offset(cellW * 2.5f, cellH * 1.5f))
+    // Teal daire (sağ-orta)
+    drawCircle(PatternTeal, radius = cellW * 0.45f, center = Offset(cellW * 3.5f, cellH * 1.6f))
+    // Pembe blok (sağ)
+    drawRoundRect(PatternPink, Offset(cellW * 4f, cellH * 1.1f), Size(cellW, cellH * 0.8f), CornerRadius(12f))
+    // Küçük sarı yaprak (sağ)
+    drawCircle(PatternYellow, radius = cellW * 0.15f, center = Offset(cellW * 4.5f, cellH * 1.3f))
+
+    // ── Satır 3 ──
+    // Koyu daire (sol alt)
+    drawCircle(PatternNavy.copy(alpha = 0.7f), radius = cellW * 0.5f, center = Offset(cellW * 0.5f, cellH * 2.5f))
+    // Turuncu daire (sol alt)
+    drawCircle(PatternOrange, radius = cellW * 0.3f, center = Offset(cellW * 1.2f, cellH * 2.3f))
+    // Coral daire
+    drawCircle(PatternCoral, radius = cellW * 0.25f, center = Offset(cellW * 1.8f, cellH * 2.6f))
+    // Mint yeşil alan
+    drawRoundRect(PatternMint, Offset(cellW * 2.2f, cellH * 2.1f), Size(cellW * 1.5f, cellH * 0.7f), CornerRadius(16f))
+    // Sarı daire (sağ alt)
+    drawCircle(PatternYellow, radius = cellW * 0.3f, center = Offset(cellW * 3.8f, cellH * 2.4f))
+    // Teal daire (sağ alt köşe)
+    drawCircle(PatternTeal, radius = cellW * 0.4f, center = Offset(w - cellW * 0.4f, cellH * 2.6f))
+    // Navy daire (sağ alt)
+    drawCircle(PatternNavy, radius = cellW * 0.55f, center = Offset(w - cellW * 0.2f, cellH * 2.2f))
 }

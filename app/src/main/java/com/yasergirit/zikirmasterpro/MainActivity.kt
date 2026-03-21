@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
@@ -44,7 +45,6 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -442,7 +442,7 @@ private suspend fun loadStringPref(context: android.content.Context, key: String
 private fun CounterScreen(activity: android.app.Activity) {
     // ── State ──
     var count by rememberSaveable { mutableIntStateOf(0) }
-    var currentTab by rememberSaveable { mutableIntStateOf(0) } // 0=AnaSayfa, 1=Sayaç, 2=Kıble, 3=Geçmiş, 4=Ayarlar
+    var currentTab by rememberSaveable { mutableIntStateOf(0) } // 0=AnaSayfa, 1=Sayaç, 2=Kıble, 3=Ayarlar
     var showDeleteAllConfirm by remember { mutableStateOf(false) }
     var savedCounters by remember { mutableStateOf(listOf<CounterSave>()) }
     var isDarkTheme by remember { mutableStateOf(true) }
@@ -539,6 +539,7 @@ private fun CounterScreen(activity: android.app.Activity) {
         } else if (showOnboarding) {
             OnboardingScreen(
                 selectedLanguage = selectedLanguage,
+                onLanguageChange = { selectedLanguage = it; saveLanguageToDataStore(context, it) },
                 onFinish = {
                     showOnboarding = false
                     saveOnboardingCompletedToDataStore(context, true)
@@ -599,13 +600,6 @@ private fun CounterScreen(activity: android.app.Activity) {
                         NavigationBarItem(
                             selected = currentTab == 3,
                             onClick = { currentTab = 3 },
-                            icon = { Icon(Icons.Default.History, contentDescription = null) },
-                            label = { Text(t("Geçmiş", "History", "Verlauf", "السجل"), fontSize = 11.sp) },
-                            colors = navColors
-                        )
-                        NavigationBarItem(
-                            selected = currentTab == 4,
-                            onClick = { currentTab = 4 },
                             icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                             label = { Text(t("Ayarlar", "Settings", "Einstellungen", "الإعدادات"), fontSize = 11.sp) },
                             colors = navColors
@@ -637,20 +631,16 @@ private fun CounterScreen(activity: android.app.Activity) {
                                 savedCounters = savedCounters + CounterSave(count, timestamp, dhikrName)
                             },
                             onPickDhikr = { showDhikrPicker = true },
-                            context = context
+                            context = context,
+                            savedCounters = savedCounters,
+                            onDeleteCounter = { item -> savedCounters = savedCounters.filter { it != item } },
+                            onDeleteAllCounters = { showDeleteAllConfirm = true }
                         )
-                        2 -> QiblaTab(
+                        2 -> com.yasergirit.zikirmasterpro.qibla.QiblaCompassScreen(
                             isDarkTheme = isDarkTheme,
                             selectedLanguage = selectedLanguage
                         )
-                        3 -> HistoryTab(
-                            savedCounters = savedCounters,
-                            isDarkTheme = isDarkTheme,
-                            selectedLanguage = selectedLanguage,
-                            onDelete = { item -> savedCounters = savedCounters.filter { it != item } },
-                            onDeleteAll = { showDeleteAllConfirm = true }
-                        )
-                        4 -> SettingsTab(
+                        3 -> SettingsTab(
                             isDarkTheme = isDarkTheme,
                             themeMode = themeMode,
                             onThemeModeChange = { themeMode = it; saveThemeModeToDataStore(context, it) },
@@ -803,8 +793,8 @@ private fun LocationPermissionGate(
             Text(
                 text = t(
                     "Namaz vakitlerini ve kıble yönünü doğru gösterebilmemiz için konum bilginize ihtiyacımız var. Konum bilginiz yalnızca bu amaçla kullanılır ve üçüncü kişilerle paylaşılmaz.",
-                    "We need your location to show accurate prayer times and qibla direction. Your location is only used for this purpose and is not shared with third parties.",
-                    "Wir benötigen Ihren Standort, um genaue Gebetszeiten und die Qibla-Richtung anzuzeigen. Ihr Standort wird nur für diesen Zweck verwendet.",
+                    "We need your location to show accurate prayer times. Your location is only used for this purpose and is not shared with third parties.",
+                    "Wir benötigen Ihren Standort, um genaue Gebetszeiten anzuzeigen. Ihr Standort wird nur für diesen Zweck verwendet.",
                     "نحتاج إلى موقعك لعرض أوقات الصلاة واتجاه القبلة بدقة. يُستخدم موقعك لهذا الغرض فقط."
                 ),
                 color = Color.White.copy(alpha = 0.85f),
@@ -852,8 +842,24 @@ private fun CounterTab(
     selectedDhikrIndex: Int,
     onSave: () -> Unit,
     onPickDhikr: () -> Unit,
-    context: android.content.Context
+    context: android.content.Context,
+    savedCounters: List<CounterSave>,
+    onDeleteCounter: (CounterSave) -> Unit,
+    onDeleteAllCounters: () -> Unit
 ) {
+    var showHistory by remember { mutableStateOf(false) }
+
+    if (showHistory) {
+        HistoryTab(
+            savedCounters = savedCounters,
+            isDarkTheme = isDarkTheme,
+            selectedLanguage = selectedLanguage,
+            onDelete = onDeleteCounter,
+            onDeleteAll = onDeleteAllCounters,
+            onBack = { showHistory = false }
+        )
+        return
+    }
     fun t(tr: String, en: String, de: String = "", ar: String = "") = when (selectedLanguage) {
         "en" -> en; "de" -> de.ifEmpty { en }; "ar" -> ar.ifEmpty { en }; else -> tr
     }
@@ -1142,7 +1148,15 @@ private fun CounterTab(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Geçmiş butonu
+        TextButton(
+            onClick = { showHistory = true },
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(18.dp), tint = onSurfaceVariant)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(t("Geçmiş", "History", "Verlauf", "السجل"), fontSize = 14.sp, color = onSurfaceVariant)
+        }
     }
 }
 
@@ -1155,7 +1169,8 @@ private fun HistoryTab(
     isDarkTheme: Boolean,
     selectedLanguage: String,
     onDelete: (CounterSave) -> Unit,
-    onDeleteAll: () -> Unit
+    onDeleteAll: () -> Unit,
+    onBack: (() -> Unit)? = null
 ) {
     fun t(tr: String, en: String, de: String = "", ar: String = "") = when (selectedLanguage) {
         "en" -> en; "de" -> de.ifEmpty { en }; "ar" -> ar.ifEmpty { en }; else -> tr
@@ -1204,13 +1219,23 @@ private fun HistoryTab(
             .background(bg)
     ) {
         // Header
-        Text(
-            text = t("Geçmiş", "History", "Verlauf", "السجل"),
-            modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 8.dp),
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = onSurface
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 12.dp, end = 20.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
+                }
+            }
+            Text(
+                text = t("Geçmiş", "History", "Verlauf", "السجل"),
+                modifier = Modifier.padding(start = if (onBack != null) 4.dp else 12.dp),
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = onSurface
+            )
+        }
 
         // İstatistik kartları
         Row(

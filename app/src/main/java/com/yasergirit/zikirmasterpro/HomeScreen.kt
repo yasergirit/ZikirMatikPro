@@ -432,6 +432,7 @@ fun HomeTab(
                 onClick = { showQuoteStory = true }
             )
         }
+
     }
 
     // Story Overlays (full screen on top)
@@ -646,10 +647,10 @@ internal suspend fun fetchPrayerTimesForHome(context: Context): Triple<List<Pray
             val gregDay = gregorian.getString("day")
             val gregYear = gregorian.getString("year")
 
-            val locale = Locale("tr", "TR")
             val cal = Calendar.getInstance()
-            val monthTr = SimpleDateFormat("MMMM", locale).format(cal.time)
-            val gregStr = "$gregDay $monthTr $gregYear"
+            val monthName = SimpleDateFormat("MMMM", Locale("tr", "TR")).format(cal.time)
+            val dayName = SimpleDateFormat("EEEE", Locale("tr", "TR")).format(cal.time)
+            val gregStr = "$gregDay $monthName $gregYear $dayName"
 
             Triple(prayerList, hijriStr, gregStr)
         } else null
