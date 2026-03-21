@@ -1,8 +1,10 @@
 package com.yasergirit.zikirmasterpro
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.location.LocationManager
 import android.util.Log
 import com.google.android.gms.location.LocationServices
@@ -12,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,8 +25,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -55,12 +61,15 @@ internal data class PrayerTimeItem(
     val time: String
 )
 
-// In-memory cache for prayer times (survives recomposition & tab switches)
+// In-memory cache for prayer times + weather + mosques (survives recomposition & tab switches)
 internal object PrayerTimesCache {
     var prayerTimes: List<PrayerTimeItem> = emptyList()
     var hijriDate: String = ""
     var gregorianDate: String = ""
     var fetchedDateKey: String = "" // "yyyy-MM-dd" to refetch next day
+    var cityName: String = ""
+    var weatherDays: List<WeatherDay> = emptyList()
+    var nearbyMosques: List<NearbyMosque> = emptyList()
 
     fun isValid(): Boolean {
         val today = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -75,6 +84,7 @@ internal object PrayerTimesCache {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeTab(
     isDarkTheme: Boolean,
@@ -95,6 +105,10 @@ fun HomeTab(
     var hijriDate by remember { mutableStateOf(PrayerTimesCache.hijriDate) }
     var gregorianDate by remember { mutableStateOf(PrayerTimesCache.gregorianDate) }
     var isLoading by remember { mutableStateOf(!cacheValid) }
+    var cityName by remember { mutableStateOf(PrayerTimesCache.cityName) }
+    var weatherDays by remember { mutableStateOf(PrayerTimesCache.weatherDays) }
+    var nearbyMosques by remember { mutableStateOf(PrayerTimesCache.nearbyMosques) }
+    var selectedMosque by remember { mutableStateOf<NearbyMosque?>(null) }
     var currentTimeMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var hasLocationPermission by remember { mutableStateOf(
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -133,6 +147,81 @@ fun HomeTab(
                 gregorianDate = times.third
             }
             isLoading = false
+        }
+    }
+
+    // Fetch city name, weather, and mosques (skip if cache valid)
+    LaunchedEffect(hasLocationPermission, locationPermissionGranted) {
+        if (!hasLocationPermission) return@LaunchedEffect
+        // Cache tamamen doluysa API çağrısı yapma
+        if (PrayerTimesCache.cityName.isNotEmpty() && PrayerTimesCache.nearbyMosques.isNotEmpty()) {
+            cityName = PrayerTimesCache.cityName
+            weatherDays = PrayerTimesCache.weatherDays
+            nearbyMosques = PrayerTimesCache.nearbyMosques
+            return@LaunchedEffect
+        }
+        withContext(Dispatchers.IO) {
+            try {
+                // Konum alınamazsa 2 saniye bekleyip tekrar dene
+                var loc = getLocationForHome(context)
+                if (loc == null) {
+                    delay(2000)
+                    loc = getLocationForHome(context)
+                }
+                if (loc == null) return@withContext
+                // City name via Geocoder
+                try {
+                    val geocoder = Geocoder(context, Locale.getDefault())
+                    @Suppress("DEPRECATION")
+                    val addresses = geocoder.getFromLocation(loc.first, loc.second, 1)
+                    cityName = addresses?.firstOrNull()?.let { addr ->
+                        addr.subAdminArea ?: addr.adminArea ?: addr.locality ?: ""
+                    } ?: ""
+                } catch (_: Exception) {}
+                // 3-day weather via Open-Meteo (free, no key)
+                try {
+                    val weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=${loc.first}&longitude=${loc.second}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=3"
+                    val client = OkHttpClient.Builder().connectTimeout(5, TimeUnit.SECONDS).readTimeout(5, TimeUnit.SECONDS).build()
+                    val resp = client.newCall(Request.Builder().url(weatherUrl).build()).execute()
+                    val body = resp.body?.string()
+                    if (resp.isSuccessful && body != null) {
+                        val daily = JSONObject(body).getJSONObject("daily")
+                        val dates = daily.getJSONArray("time")
+                        val codes = daily.getJSONArray("weather_code")
+                        val maxTemps = daily.getJSONArray("temperature_2m_max")
+                        val minTemps = daily.getJSONArray("temperature_2m_min")
+                        val days = mutableListOf<WeatherDay>()
+                        val cal = Calendar.getInstance()
+                        val langLocale = when (selectedLanguage) {
+                            "en" -> Locale.ENGLISH
+                            "de" -> Locale.GERMAN
+                            "ar" -> Locale("ar")
+                            else -> Locale("tr", "TR")
+                        }
+                        val dayFmt = SimpleDateFormat("EEE", langLocale)
+                        for (i in 0 until minOf(3, dates.length())) {
+                            val dateParts = dates.getString(i).split("-")
+                            cal.set(dateParts[0].toInt(), dateParts[1].toInt() - 1, dateParts[2].toInt())
+                            days.add(WeatherDay(
+                                dayName = dayFmt.format(cal.time),
+                                maxTemp = maxTemps.getDouble(i).toInt(),
+                                minTemp = minTemps.getDouble(i).toInt(),
+                                weatherCode = codes.getInt(i)
+                            ))
+                        }
+                        weatherDays = days
+                    }
+                } catch (_: Exception) {}
+                // En yakın camiler
+                try {
+                    val mosques = fetchNearbyMosques(loc.first, loc.second)
+                    nearbyMosques = mosques
+                    PrayerTimesCache.nearbyMosques = mosques
+                } catch (_: Exception) {}
+                // Cache'e kaydet
+                PrayerTimesCache.cityName = cityName
+                PrayerTimesCache.weatherDays = weatherDays
+            } catch (_: Exception) {}
         }
     }
 
@@ -235,6 +324,51 @@ fun HomeTab(
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // ── Header: Şehir + Metod | Hava Durumu ──
+                    if (cityName.isNotEmpty() || weatherDays.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            // Sol: Şehir + Hesaplama metodu
+                            Column {
+                                if (cityName.isNotEmpty()) {
+                                    Text(
+                                        text = cityName,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = onSurface
+                                    )
+                                }
+                                Text(
+                                    text = t("Diyanet Takvimi", "Diyanet Calendar", "Diyanet-Kalender", "تقويم الديانة"),
+                                    fontSize = 12.sp,
+                                    color = onSurfaceVariant
+                                )
+                            }
+                            // Sağ: 3 günlük hava durumu
+                            if (weatherDays.isNotEmpty()) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    weatherDays.forEach { day ->
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = weatherCodeToEmoji(day.weatherCode),
+                                                fontSize = 22.sp
+                                            )
+                                            Text(
+                                                text = day.dayName,
+                                                fontSize = 10.sp,
+                                                color = onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
                     // Current/Next Prayer Name
                     val displayPrayerName = if (currentPrayer != null) {
                         when (selectedLanguage) { "en" -> currentPrayer.nameEn; "de" -> currentPrayer.nameDe.ifEmpty { currentPrayer.nameEn }; "ar" -> currentPrayer.nameAr.ifEmpty { currentPrayer.nameEn }; else -> currentPrayer.nameTr }
@@ -406,6 +540,56 @@ fun HomeTab(
             }
         }
 
+        // ── Yakındaki Camiler ──
+        if (nearbyMosques.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = t("Yakındaki Camiler", "Nearby Mosques", "Moscheen in der Nähe", "المساجد القريبة"),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = primary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    nearbyMosques.forEach { mosque ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { selectedMosque = mosque }
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🕌", fontSize = 22.sp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = mosque.name,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = onSurface,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = formatDistance(mosque.distance),
+                                fontSize = 13.sp,
+                                color = onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // ── Categories (always visible) ──
@@ -454,6 +638,93 @@ fun HomeTab(
             onDismiss = { showQuoteStory = false }
         )
     }
+    // ── Cami Bottom Sheet ──
+    if (selectedMosque != null) {
+        val mosque = selectedMosque!!
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { selectedMosque = null },
+            containerColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color.White,
+            tonalElevation = 0.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("🕌", fontSize = 48.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = mosque.name,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = onSurface,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = formatDistance(mosque.distance) + " • " + t("Yürüme mesafesi", "Walking distance", "Gehentfernung", "مسافة المشي"),
+                    fontSize = 14.sp,
+                    color = onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Yürüyerek yol tarifi butonu
+                Button(
+                    onClick = {
+                        selectedMosque = null
+                        val uri = android.net.Uri.parse(
+                            "google.navigation:q=${mosque.lat},${mosque.lng}&mode=w"
+                        )
+                        val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri).apply {
+                            setPackage("com.google.android.apps.maps")
+                        }
+                        try { context.startActivity(mapIntent) } catch (_: Exception) {
+                            val webUri = android.net.Uri.parse(
+                                "https://www.google.com/maps/dir/?api=1&destination=${mosque.lat},${mosque.lng}&travelmode=walking"
+                            )
+                            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, webUri))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primary)
+                ) {
+                    Text("🚶 ", fontSize = 18.sp)
+                    Text(
+                        text = t("Yürüyerek Yol Tarifi", "Walking Directions", "Fußweg-Navigation", "اتجاهات المشي"),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Haritada göster butonu
+                OutlinedButton(
+                    onClick = {
+                        selectedMosque = null
+                        val webUri = android.net.Uri.parse(
+                            "geo:${mosque.lat},${mosque.lng}?q=${mosque.lat},${mosque.lng}(${android.net.Uri.encode(mosque.name)})"
+                        )
+                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, webUri))
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(
+                        text = t("Haritada Göster", "Show on Map", "Auf Karte anzeigen", "عرض على الخريطة"),
+                        fontSize = 14.sp,
+                        color = primary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+            }
+        }
+    }
+
     } // Box
 }
 
@@ -471,7 +742,7 @@ private fun CategoryCircle(
         Box(
             modifier = Modifier
                 .size(72.dp)
-                .clip(CircleShape)
+                .clip(RoundedCornerShape(16.dp))
                 .background(bgColor),
             contentAlignment = Alignment.Center
         ) {
@@ -658,4 +929,140 @@ internal suspend fun fetchPrayerTimesForHome(context: Context): Triple<List<Pray
         Log.e("HomeScreen", "API error", e)
         null
     }
+}
+
+// ── Weather helpers ──
+
+internal data class WeatherDay(
+    val dayName: String,
+    val maxTemp: Int,
+    val minTemp: Int,
+    val weatherCode: Int
+)
+
+@SuppressLint("MissingPermission")
+private suspend fun getLocationForHome(context: Context): Pair<Double, Double>? {
+    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+        ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+    ) return null
+    val fusedClient = LocationServices.getFusedLocationProviderClient(context)
+    val loc = suspendCoroutine<android.location.Location?> { cont ->
+        fusedClient.lastLocation
+            .addOnSuccessListener { cont.resume(it) }
+            .addOnFailureListener { cont.resume(null) }
+    } ?: return null
+    return Pair(loc.latitude, loc.longitude)
+}
+
+// ── Nearby Mosques ──
+
+internal data class NearbyMosque(
+    val name: String,
+    val distance: Int, // metre
+    val lat: Double,
+    val lng: Double
+)
+
+/**
+ * Overpass API (OpenStreetMap) ile yakındaki camileri getirir.
+ * Ücretsiz, API key gerektirmez.
+ */
+private fun fetchNearbyMosques(lat: Double, lng: Double): List<NearbyMosque> {
+    return try {
+        val query = """
+            [out:json][timeout:10];
+            (
+              node["amenity"="place_of_worship"]["religion"="muslim"](around:2000,$lat,$lng);
+              way["amenity"="place_of_worship"]["religion"="muslim"](around:2000,$lat,$lng);
+            );
+            out center tags;
+        """.trimIndent()
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
+
+        val requestBody = okhttp3.FormBody.Builder()
+            .add("data", query)
+            .build()
+
+        val request = Request.Builder()
+            .url("https://overpass-api.de/api/interpreter")
+            .post(requestBody)
+            .build()
+
+        val response = client.newCall(request).execute()
+        val body = response.body?.string()
+
+        if (response.isSuccessful && body != null) {
+            val elements = JSONObject(body).getJSONArray("elements")
+            val mosques = mutableListOf<NearbyMosque>()
+
+            for (i in 0 until elements.length()) {
+                val el = elements.getJSONObject(i)
+                val tags = el.optJSONObject("tags") ?: continue
+                val name = tags.optString("name", "")
+                    .ifEmpty { tags.optString("name:tr", "") }
+                    .ifEmpty { tags.optString("name:en", "") }
+                if (name.isEmpty()) continue
+                // Koordinatlar: node -> lat/lon, way -> center.lat/center.lon
+                val center = el.optJSONObject("center")
+                val mLat = if (el.has("lat")) el.getDouble("lat") else center?.optDouble("lat") ?: continue
+                val mLng = if (el.has("lon")) el.getDouble("lon") else center?.optDouble("lon") ?: continue
+                val dist = haversineDistance(lat, lng, mLat, mLng)
+                mosques.add(NearbyMosque(name, dist, mLat, mLng))
+            }
+
+            mosques.sortBy { it.distance }
+            mosques.take(3)
+        } else emptyList()
+    } catch (e: Exception) {
+        Log.e("HomeScreen", "Mosque fetch error", e)
+        emptyList()
+    }
+}
+
+/** Haversine formülü ile iki koordinat arası mesafe (metre). */
+private fun haversineDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Int {
+    val r = 6371000.0 // Dünya yarıçapı (metre)
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLng = Math.toRadians(lng2 - lng1)
+    val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
+            kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
+            kotlin.math.sin(dLng / 2) * kotlin.math.sin(dLng / 2)
+    val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
+    return (r * c).toInt()
+}
+
+/** Mesafeyi okunabilir formata çevirir: <1000m → "350m", >=1000m → "1.2 km" */
+private fun formatDistance(meters: Int): String {
+    return if (meters < 1000) "${meters}m"
+    else "${"%.1f".format(meters / 1000.0)} km"
+}
+
+/**
+ * WMO weather code'u hava durumu emojisine çevirir.
+ * Emojiler: https://www.piliapp.com/emoji/list/weather/
+ */
+private fun weatherCodeToEmoji(code: Int): String = when (code) {
+    0 -> "☀\uFE0F"             // Clear sky
+    1 -> "\uD83C\uDF24\uFE0F"  // Mainly clear (sun small cloud)
+    2 -> "⛅"                   // Partly cloudy
+    3 -> "☁\uFE0F"             // Overcast
+    45, 48 -> "\uD83C\uDF2B\uFE0F"  // Fog
+    51, 53, 55 -> "\uD83C\uDF26\uFE0F" // Drizzle (sun behind rain cloud)
+    56, 57 -> "\uD83C\uDF27\uFE0F"  // Freezing drizzle
+    61, 63 -> "\uD83C\uDF27\uFE0F"  // Rain
+    65 -> "☔"                   // Heavy rain
+    66, 67 -> "\uD83C\uDF28\uFE0F"  // Freezing rain
+    71, 73 -> "\uD83C\uDF28\uFE0F"  // Snow
+    75 -> "❄\uFE0F"             // Heavy snow
+    77 -> "\uD83C\uDF28\uFE0F"  // Snow grains
+    80, 81 -> "\uD83C\uDF27\uFE0F" // Rain showers
+    82 -> "☔"                   // Violent rain showers
+    85, 86 -> "\uD83C\uDF28\uFE0F" // Snow showers
+    95 -> "⛈\uFE0F"             // Thunderstorm
+    96, 99 -> "\uD83C\uDF29\uFE0F" // Thunderstorm with hail
+    else -> "\uD83C\uDF24\uFE0F"
 }

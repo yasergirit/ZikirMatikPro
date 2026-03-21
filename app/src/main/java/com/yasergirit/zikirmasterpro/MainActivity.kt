@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Delete
@@ -443,6 +444,7 @@ private fun CounterScreen(activity: android.app.Activity) {
     // ── State ──
     var count by rememberSaveable { mutableIntStateOf(0) }
     var currentTab by rememberSaveable { mutableIntStateOf(0) } // 0=AnaSayfa, 1=Sayaç, 2=Kıble, 3=Ayarlar
+    var showMorePanel by remember { mutableStateOf(false) }
     var showDeleteAllConfirm by remember { mutableStateOf(false) }
     var savedCounters by remember { mutableStateOf(listOf<CounterSave>()) }
     var isDarkTheme by remember { mutableStateOf(true) }
@@ -591,17 +593,10 @@ private fun CounterScreen(activity: android.app.Activity) {
                             colors = navColors
                         )
                         NavigationBarItem(
-                            selected = currentTab == 2,
-                            onClick = { currentTab = 2 },
-                            icon = { Icon(Icons.Default.Explore, contentDescription = null) },
-                            label = { Text(t("Kıble", "Qibla", "Qibla", "القبلة"), fontSize = 11.sp) },
-                            colors = navColors
-                        )
-                        NavigationBarItem(
-                            selected = currentTab == 3,
-                            onClick = { currentTab = 3 },
-                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                            label = { Text(t("Ayarlar", "Settings", "Einstellungen", "الإعدادات"), fontSize = 11.sp) },
+                            selected = false,
+                            onClick = { showMorePanel = true },
+                            icon = { Icon(Icons.Default.Apps, contentDescription = null) },
+                            label = { Text(t("Daha Fazla", "More", "Mehr", "المزيد"), fontSize = 11.sp) },
                             colors = navColors
                         )
                     }
@@ -636,23 +631,124 @@ private fun CounterScreen(activity: android.app.Activity) {
                             onDeleteCounter = { item -> savedCounters = savedCounters.filter { it != item } },
                             onDeleteAllCounters = { showDeleteAllConfirm = true }
                         )
-                        2 -> com.yasergirit.zikirmasterpro.qibla.QiblaCompassScreen(
-                            isDarkTheme = isDarkTheme,
-                            selectedLanguage = selectedLanguage
-                        )
-                        3 -> SettingsTab(
-                            isDarkTheme = isDarkTheme,
-                            themeMode = themeMode,
-                            onThemeModeChange = { themeMode = it; saveThemeModeToDataStore(context, it) },
-                            isSoundEnabled = isSoundEnabled,
-                            onSoundChange = { isSoundEnabled = it; saveSoundEnabledToDataStore(context, it) },
-                            isVibrationEnabled = isVibrationEnabled,
-                            onVibrationChange = { isVibrationEnabled = it; saveVibrationEnabledToDataStore(context, it) },
-                            selectedLanguage = selectedLanguage,
-                            onLanguageChange = { selectedLanguage = it; saveLanguageToDataStore(context, it) },
-                            savedCounters = savedCounters,
-                            activity = context as? android.app.Activity
-                        )
+                    }
+                }
+            }
+
+            // ── Daha Fazla Paneli ──
+            if (showMorePanel) {
+                var moreSubPage by remember { mutableStateOf("") } // "" = grid, "settings" = ayarlar
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(bg)
+                ) {
+                    when (moreSubPage) {
+                        "" -> {
+                            // Grid ana sayfası
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(20.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { showMorePanel = false; currentTab = 0 }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = t("Daha Fazla", "More", "Mehr", "المزيد"),
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = onSurface
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(24.dp))
+
+                                val morePanelCardColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    MorePanelItem(
+                                        emoji = "🧭",
+                                        label = t("Kıble", "Qibla", "Qibla", "القبلة"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { moreSubPage = "qibla" }
+                                    )
+                                    MorePanelItem(
+                                        emoji = "⚙️",
+                                        label = t("Ayarlar", "Settings", "Einstellungen", "الإعدادات"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { moreSubPage = "settings" }
+                                    )
+                                    Box(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                        "qibla" -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { moreSubPage = "" }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
+                                    }
+                                    Text(t("Kıble Pusulası", "Qibla Compass", "Qibla-Kompass", "بوصلة القبلة"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = onSurface)
+                                }
+                                com.yasergirit.zikirmasterpro.qibla.QiblaCompassScreen(
+                                    isDarkTheme = isDarkTheme,
+                                    selectedLanguage = selectedLanguage
+                                )
+                            }
+                        }
+                        "settings" -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                // Geri butonu
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 4.dp, top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { moreSubPage = "" }) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = null,
+                                            tint = onSurface
+                                        )
+                                    }
+                                    Text(
+                                        text = t("Ayarlar", "Settings", "Einstellungen", "الإعدادات"),
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = onSurface
+                                    )
+                                }
+                                // Ayarlar içeriği
+                                SettingsTab(
+                                    isDarkTheme = isDarkTheme,
+                                    themeMode = themeMode,
+                                    onThemeModeChange = { themeMode = it; saveThemeModeToDataStore(context, it) },
+                                    isSoundEnabled = isSoundEnabled,
+                                    onSoundChange = { isSoundEnabled = it; saveSoundEnabledToDataStore(context, it) },
+                                    isVibrationEnabled = isVibrationEnabled,
+                                    onVibrationChange = { isVibrationEnabled = it; saveVibrationEnabledToDataStore(context, it) },
+                                    selectedLanguage = selectedLanguage,
+                                    onLanguageChange = { selectedLanguage = it; saveLanguageToDataStore(context, it) },
+                                    savedCounters = savedCounters,
+                                    activity = context as? android.app.Activity
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1430,13 +1526,7 @@ private fun SettingsTab(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
-        Text(
-            text = t("Ayarlar", "Settings", "Einstellungen", "الإعدادات"),
-            modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 20.dp),
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = onSurface
-        )
+        Spacer(modifier = Modifier.height(8.dp))
 
         // ── Dil ──
         SettingsSectionCard(cardColor = cardColor) {
@@ -1497,47 +1587,6 @@ private fun SettingsTab(
                     selected = themeMode == "system",
                     onClick = { onThemeModeChange("system") },
                     modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Ses & Titreşim ──
-        SettingsSectionCard(cardColor = cardColor) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(t("Ses Efektleri", "Sound Effects", "Soundeffekte", "المؤثرات الصوتية"), fontWeight = FontWeight.Medium, fontSize = 15.sp, color = onSurface)
-                Switch(
-                    checked = isSoundEnabled,
-                    onCheckedChange = onSoundChange,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = primary,
-                        uncheckedThumbColor = onSurfaceVariant,
-                        uncheckedTrackColor = surfaceVariant
-                    )
-                )
-            }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(t("Titreşim", "Vibration", "Vibration", "الاهتزاز"), fontWeight = FontWeight.Medium, fontSize = 15.sp, color = onSurface)
-                Switch(
-                    checked = isVibrationEnabled,
-                    onCheckedChange = onVibrationChange,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = primary,
-                        uncheckedThumbColor = onSurfaceVariant,
-                        uncheckedTrackColor = surfaceVariant
-                    )
                 )
             }
         }
@@ -2080,6 +2129,41 @@ private fun SegmentButton(
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             fontSize = 13.sp,
             color = if (selected) primary else onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun MorePanelItem(
+    emoji: String,
+    label: String,
+    bgColor: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(bgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = emoji, fontSize = 32.sp)
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            textAlign = TextAlign.Center,
+            maxLines = 1
         )
     }
 }

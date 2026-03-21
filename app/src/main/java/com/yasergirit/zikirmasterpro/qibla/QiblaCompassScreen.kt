@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.yasergirit.zikirmasterpro.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlin.math.sin
 import kotlin.math.cos
 
@@ -174,13 +175,7 @@ fun QiblaCompassScreen(
         modifier = Modifier.fillMaxSize().background(bg),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = t("Kıble Pusulası", "Qibla Compass", "Qibla-Kompass", "بوصلة القبلة"),
-            modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 4.dp),
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = onSurface
-        )
+        Spacer(modifier = Modifier.height(12.dp))
 
         when {
             !isSensorAvailable -> {
@@ -217,8 +212,45 @@ fun QiblaCompassScreen(
                 Spacer(modifier = Modifier.weight(1f))
             }
             else -> {
+                // Yön gösterici: sola/sağa dönün + yanıp sönen ok
+                val dirAngle = QiblaCalculator.normalizeDegrees(relativeAngle)
+                var blinkVisible by remember { mutableStateOf(true) }
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        delay(500)
+                        blinkVisible = !blinkVisible
+                    }
+                }
+                val blinkAlpha by animateFloatAsState(
+                    targetValue = if (blinkVisible) 1f else 0.15f,
+                    animationSpec = tween(400),
+                    label = "blinkAlpha"
+                )
+
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("${QiblaCalculator.normalizeDegrees(azimuth).toInt()}°", fontSize = 16.sp, color = onSurfaceVariant)
+
+                when {
+                    dirAngle in 5f..180f -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(t("Sağa dönün", "Turn right", "Nach rechts drehen", "انعطف يميناً"), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = primary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("→", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = primary.copy(alpha = blinkAlpha))
+                        }
+                    }
+                    dirAngle > 180f && dirAngle <= 355f -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("←", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = primary.copy(alpha = blinkAlpha))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(t("Sola dönün", "Turn left", "Nach links drehen", "انعطف يساراً"), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = primary)
+                        }
+                    }
+                    else -> {
+                        Text("✓ " + t("Kıble yönündesiniz", "Facing Qibla", "Qibla-Richtung", "أنت في اتجاه القبلة"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Gold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Text("${QiblaCalculator.normalizeDegrees(azimuth).toInt()}°", fontSize = 14.sp, color = onSurfaceVariant)
                 Spacer(modifier = Modifier.weight(0.2f))
 
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(320.dp)) {
