@@ -5,9 +5,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
@@ -18,7 +22,8 @@ class EzanService : Service() {
 
     companion object {
         const val CHANNEL_ID = "ezan_playback_channel"
-        const val NOTIF_ID = 3001
+        const val NOTIF_ID = 5001
+        const val ACTION_STOP_EZAN = "com.yasergirit.zikirmasterpro.STOP_EZAN"
         private const val TAG = "EzanService"
 
         fun start(context: Context) {
@@ -36,53 +41,134 @@ class EzanService : Service() {
     }
 
     private var mediaPlayer: MediaPlayer? = null
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    // Volume tuşu / ses kapat algılama
+    private val volumeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                // Kulaklık çıkarıldı vb.
+                stopEzan()
+            }
+        }
+    }
+
+    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Başka uygulama ses aldı veya ses kesildi
+                stopEzan()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Ses kısılabilir ama ezan için durdur
+                stopEzan()
+            }
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // BECOMING_NOISY receiver
+        val filter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+        registerReceiver(volumeReceiver, filter)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_EZAN) {
+            stopEzan()
+            return START_NOT_STICKY
+        }
+
         val notification = buildNotification()
         startForeground(NOTIF_ID, notification)
-
         playEzan()
-
         return START_NOT_STICKY
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        val am = audioManager ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .build()
+                )
+                .setOnAudioFocusChangeListener(audioFocusListener)
+                .build()
+            audioFocusRequest = request
+            am.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else {
+            @Suppress("DEPRECATION")
+            am.requestAudioFocus(
+                audioFocusListener,
+                AudioManager.STREAM_ALARM,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        val am = audioManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            am.abandonAudioFocus(audioFocusListener)
+        }
     }
 
     private fun playEzan() {
         try {
             mediaPlayer?.release()
+
+            // Audio focus al - reddedilirse çalma
+            if (!requestAudioFocus()) {
+                Log.w(TAG, "Audio focus denied")
+                stopEzan()
+                return
+            }
+
+            // Ses seviyesini kontrol et - ses kapalıysa alarm stream üzerinden çal
             mediaPlayer = MediaPlayer.create(this, R.raw.ezan).apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setUsage(AudioAttributes.USAGE_ALARM) // ALARM stream - ses kapatma tuşundan etkilenmez
                         .build()
                 )
                 setOnCompletionListener {
-                    it.release()
-                    mediaPlayer = null
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                    stopEzan()
                 }
-                setOnErrorListener { mp, _, _ ->
-                    mp.release()
-                    mediaPlayer = null
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                setOnErrorListener { _, _, _ ->
+                    stopEzan()
                     true
                 }
                 start()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Ezan playback error", e)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            stopEzan()
         }
+    }
+
+    private fun stopEzan() {
+        mediaPlayer?.let {
+            try { if (it.isPlaying) it.stop() } catch (_: Exception) {}
+            try { it.release() } catch (_: Exception) {}
+        }
+        mediaPlayer = null
+        abandonAudioFocus()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun createNotificationChannel() {
@@ -104,8 +190,17 @@ class EzanService : Service() {
         val tapIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val pendingIntent = PendingIntent.getActivity(
+        val tapPendingIntent = PendingIntent.getActivity(
             this, 0, tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // "Ezanı Kapat" butonu
+        val stopIntent = Intent(this, EzanService::class.java).apply {
+            action = ACTION_STOP_EZAN
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, 1, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -115,13 +210,18 @@ class EzanService : Service() {
             .setContentText("Ezan çalınıyor...")
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(tapPendingIntent)
+            .addAction(R.drawable.ic_notif, "Kapat", stopPendingIntent)
             .build()
     }
 
     override fun onDestroy() {
-        mediaPlayer?.release()
+        try { unregisterReceiver(volumeReceiver) } catch (_: Exception) {}
+        mediaPlayer?.let {
+            try { it.release() } catch (_: Exception) {}
+        }
         mediaPlayer = null
+        abandonAudioFocus()
         super.onDestroy()
     }
 }

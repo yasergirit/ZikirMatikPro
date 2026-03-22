@@ -43,10 +43,12 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -399,6 +401,16 @@ private suspend fun loadDhikrIndexFromDataStore(context: android.content.Context
 }
 
 // ── Generic boolean pref helpers (namaz vakti bildirimleri vb.) ──
+private fun isMiui(): Boolean {
+    return try {
+        @Suppress("PrivateApi")
+        val clazz = Class.forName("android.os.SystemProperties")
+        val get = clazz.getMethod("get", String::class.java, String::class.java)
+        val miuiVersion = get.invoke(null, "ro.miui.ui.version.name", "") as String
+        miuiVersion.isNotEmpty()
+    } catch (_: Exception) { false }
+}
+
 private fun saveBooleanPref(context: android.content.Context, key: String, value: Boolean) {
     try {
         val prefKey = booleanPreferencesKey(key)
@@ -443,7 +455,7 @@ private suspend fun loadStringPref(context: android.content.Context, key: String
 private fun CounterScreen(activity: android.app.Activity) {
     // ── State ──
     var count by rememberSaveable { mutableIntStateOf(0) }
-    var currentTab by rememberSaveable { mutableIntStateOf(0) } // 0=AnaSayfa, 1=Sayaç, 2=Kıble, 3=Ayarlar
+    var currentTab by rememberSaveable { mutableIntStateOf(0) } // 0=AnaSayfa, 1=Kuran, 2=Sayaç
     var showMorePanel by remember { mutableStateOf(false) }
     var showDeleteAllConfirm by remember { mutableStateOf(false) }
     var savedCounters by remember { mutableStateOf(listOf<CounterSave>()) }
@@ -588,6 +600,13 @@ private fun CounterScreen(activity: android.app.Activity) {
                         NavigationBarItem(
                             selected = currentTab == 1,
                             onClick = { currentTab = 1 },
+                            icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null) },
+                            label = { Text(t("Kur'an", "Quran", "Quran", "القرآن"), fontSize = 11.sp) },
+                            colors = navColors
+                        )
+                        NavigationBarItem(
+                            selected = currentTab == 2,
+                            onClick = { currentTab = 2 },
                             icon = { Icon(Icons.Outlined.TouchApp, contentDescription = null) },
                             label = { Text(t("Sayaç", "Counter", "Zähler", "عدّاد"), fontSize = 11.sp) },
                             colors = navColors
@@ -596,7 +615,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                             selected = false,
                             onClick = { showMorePanel = true },
                             icon = { Icon(Icons.Default.Apps, contentDescription = null) },
-                            label = { Text(t("Daha Fazla", "More", "Mehr", "المزيد"), fontSize = 11.sp) },
+                            label = { Text(t("Daha Fazla", "More", "Mehr", "\u0627\u0644\u0645\u0632\u064A\u062F"), fontSize = 11.sp) },
                             colors = navColors
                         )
                     }
@@ -609,7 +628,11 @@ private fun CounterScreen(activity: android.app.Activity) {
                             selectedLanguage = selectedLanguage,
                             locationPermissionGranted = locationPermissionGranted
                         )
-                        1 -> CounterTab(
+                        1 -> QuranScreen(
+                            isDarkTheme = isDarkTheme,
+                            selectedLanguage = selectedLanguage
+                        )
+                        2 -> CounterTab(
                             count = count,
                             onCountChange = { count = it },
                             dhikrName = dhikrName,
@@ -674,22 +697,54 @@ private fun CounterScreen(activity: android.app.Activity) {
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     MorePanelItem(
-                                        emoji = "🧭",
-                                        label = t("Kıble", "Qibla", "Qibla", "القبلة"),
+                                        emoji = "\uD83E\uDDED",
+                                        label = t("K\u0131ble", "Qibla", "Qibla", "\u0627\u0644\u0642\u0628\u0644\u0629"),
                                         bgColor = morePanelCardColor,
                                         textColor = onSurface,
                                         modifier = Modifier.weight(1f),
                                         onClick = { moreSubPage = "qibla" }
                                     )
                                     MorePanelItem(
-                                        emoji = "⚙️",
-                                        label = t("Ayarlar", "Settings", "Einstellungen", "الإعدادات"),
+                                        emoji = "\uD83D\uDCDC",
+                                        label = t("Hadis", "Hadith", "Hadith", "\u0627\u0644\u062D\u062F\u064A\u062B"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { moreSubPage = "hadith" }
+                                    )
+                                    MorePanelItem(
+                                        emoji = "\u2728",
+                                        label = t("Esma\u00FCl H\u00FCsna", "Names of Allah", "Namen Allahs", "\u0623\u0633\u0645\u0627\u0621 \u0627\u0644\u0644\u0647"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { moreSubPage = "esma" }
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    MorePanelItem(
+                                        emoji = "\uD83D\uDD4B",
+                                        label = t("K\u00e2be Canl\u0131", "Kaaba Live", "Kaaba Live", "\u0627\u0644\u0643\u0639\u0628\u0629 \u0645\u0628\u0627\u0634\u0631"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { moreSubPage = "kaaba" }
+                                    )
+                                    MorePanelItem(
+                                        emoji = "\u2699\uFE0F",
+                                        label = t("Ayarlar", "Settings", "Einstellungen", "\u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A"),
                                         bgColor = morePanelCardColor,
                                         textColor = onSurface,
                                         modifier = Modifier.weight(1f),
                                         onClick = { moreSubPage = "settings" }
                                     )
-                                    Box(modifier = Modifier.weight(1f))
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
@@ -705,6 +760,57 @@ private fun CounterScreen(activity: android.app.Activity) {
                                     Text(t("Kıble Pusulası", "Qibla Compass", "Qibla-Kompass", "بوصلة القبلة"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = onSurface)
                                 }
                                 com.yasergirit.zikirmasterpro.qibla.QiblaCompassScreen(
+                                    isDarkTheme = isDarkTheme,
+                                    selectedLanguage = selectedLanguage
+                                )
+                            }
+                        }
+                        "hadith" -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { moreSubPage = "" }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
+                                    }
+                                    Text(t("Hadis-i Serif", "Hadith", "Hadith", "\u0627\u0644\u062D\u062F\u064A\u062B"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = onSurface)
+                                }
+                                HadithScreen(
+                                    isDarkTheme = isDarkTheme,
+                                    selectedLanguage = selectedLanguage
+                                )
+                            }
+                        }
+                        "esma" -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { moreSubPage = "" }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
+                                    }
+                                    Text(t("Esma\u00FCl H\u00FCsna", "Names of Allah", "Namen Allahs", "\u0623\u0633\u0645\u0627\u0621 \u0627\u0644\u0644\u0647 \u0627\u0644\u062D\u0633\u0646\u0649"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = onSurface)
+                                }
+                                EsmaScreen(
+                                    isDarkTheme = isDarkTheme,
+                                    selectedLanguage = selectedLanguage
+                                )
+                            }
+                        }
+                        "kaaba" -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { moreSubPage = "" }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
+                                    }
+                                    Text(t("K\u00e2be 7/24 Canl\u0131 Yay\u0131n", "Kaaba 24/7 Live", "Kaaba 24/7 Live", "\u0627\u0644\u0643\u0639\u0628\u0629 \u0628\u062B \u0645\u0628\u0627\u0634\u0631"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = onSurface)
+                                }
+                                KaabaLiveScreen(
                                     isDarkTheme = isDarkTheme,
                                     selectedLanguage = selectedLanguage
                                 )
@@ -1596,12 +1702,6 @@ private fun SettingsTab(
         // ── Namaz Vakti Bildirimleri ──
         var prayerNotifEnabled by remember { mutableStateOf(true) }
         var ezanSoundEnabled by remember { mutableStateOf(true) }
-        var prayerFajr by remember { mutableStateOf(true) }
-        var prayerSunrise by remember { mutableStateOf(false) }
-        var prayerDhuhr by remember { mutableStateOf(true) }
-        var prayerAsr by remember { mutableStateOf(true) }
-        var prayerMaghrib by remember { mutableStateOf(true) }
-        var prayerIsha by remember { mutableStateOf(true) }
         var prayerMethod by remember { mutableStateOf("13") }
         var methodDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -1635,17 +1735,6 @@ private fun SettingsTab(
             prayerNotifEnabled = loadBooleanPref(context, "prayer_notif_enabled", true)
             ezanSoundEnabled = loadBooleanPref(context, "ezan_sound_enabled", true)
             prayerMethod = loadStringPref(context, "prayer_method", "13")
-            prayerFajr = loadBooleanPref(context, "prayer_notif_fajr", true)
-            prayerSunrise = loadBooleanPref(context, "prayer_notif_sunrise", false)
-            prayerDhuhr = loadBooleanPref(context, "prayer_notif_dhuhr", true)
-            prayerAsr = loadBooleanPref(context, "prayer_notif_asr", true)
-            prayerMaghrib = loadBooleanPref(context, "prayer_notif_maghrib", true)
-            prayerIsha = loadBooleanPref(context, "prayer_notif_isha", true)
-        }
-
-        fun savePrayerPref(key: String, value: Boolean) {
-            saveBooleanPref(context, key, value)
-            if (prayerNotifEnabled) BootReceiver.runOnce(context)
         }
 
         SettingsSectionCard(cardColor = cardColor) {
@@ -1689,6 +1778,63 @@ private fun SettingsTab(
             }
 
             if (prayerNotifEnabled) {
+                // Xiaomi/MIUI autostart uyarısı
+                if (isMiui()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                try {
+                                    val intent = Intent()
+                                    intent.component = android.content.ComponentName(
+                                        "com.miui.securitycenter",
+                                        "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                                    )
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    try {
+                                        val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                        intent.data = android.net.Uri.parse("package:${context.packageName}")
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {}
+                                }
+                            },
+                        shape = RoundedCornerShape(10.dp),
+                        color = Gold.copy(alpha = 0.15f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("⚠️", fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    t("Arka Plan Izni Gerekli", "Background Permission Required", "Hintergrundberechtigung erforderlich", "إذن الخلفية مطلوب"),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = onSurface
+                                )
+                                Text(
+                                    t(
+                                        "Uygulama kapaliyken ezan calabilmesi icin Otomatik Baslatma iznini acin",
+                                        "Enable Auto-start permission for adhan when app is closed",
+                                        "Aktivieren Sie die Autostart-Berechtigung",
+                                        "فعّل إذن التشغيل التلقائي لسماع الأذان"
+                                    ),
+                                    fontSize = 11.sp,
+                                    color = onSurfaceVariant,
+                                    lineHeight = 14.sp
+                                )
+                            }
+                            Text("→", fontSize = 18.sp, color = primary)
+                        }
+                    }
+                }
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
 
                 // Ezan Sesi toggle
@@ -1729,42 +1875,144 @@ private fun SettingsTab(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
 
-                data class PrayerToggle(val key: String, val nameTr: String, val nameEn: String, val nameDe: String = "", val nameAr: String = "", val value: Boolean, val onChange: (Boolean) -> Unit)
-                val toggles = listOf(
-                    PrayerToggle("prayer_notif_fajr", "İmsak", "Fajr", "Fajr", "الفجر", prayerFajr) { prayerFajr = it; savePrayerPref("prayer_notif_fajr", it) },
-                    PrayerToggle("prayer_notif_sunrise", "Güneş", "Sunrise", "Sunrise", "الشروق", prayerSunrise) { prayerSunrise = it; savePrayerPref("prayer_notif_sunrise", it) },
-                    PrayerToggle("prayer_notif_dhuhr", "Öğle", "Dhuhr", "Dhuhr", "الظهر", prayerDhuhr) { prayerDhuhr = it; savePrayerPref("prayer_notif_dhuhr", it) },
-                    PrayerToggle("prayer_notif_asr", "İkindi", "Asr", "Asr", "العصر", prayerAsr) { prayerAsr = it; savePrayerPref("prayer_notif_asr", it) },
-                    PrayerToggle("prayer_notif_maghrib", "Akşam", "Maghrib", "Maghrib", "المغرب", prayerMaghrib) { prayerMaghrib = it; savePrayerPref("prayer_notif_maghrib", it) },
-                    PrayerToggle("prayer_notif_isha", "Yatsı", "Isha", "Isha", "العشاء", prayerIsha) { prayerIsha = it; savePrayerPref("prayer_notif_isha", it) },
+                data class PrayerToggleInfo(
+                    val key: String, val nameTr: String, val nameEn: String,
+                    val nameDe: String = "", val nameAr: String = "",
+                    val hasOnTime: Boolean = true
+                )
+                val prayerToggles = listOf(
+                    PrayerToggleInfo("fajr", "İmsak", "Fajr", "Fajr", "الفجر"),
+                    PrayerToggleInfo("sunrise", "Güneş", "Sunrise", "Sunrise", "الشروق", hasOnTime = false),
+                    PrayerToggleInfo("dhuhr", "Öğle", "Dhuhr", "Dhuhr", "الظهر"),
+                    PrayerToggleInfo("asr", "İkindi", "Asr", "Asr", "العصر"),
+                    PrayerToggleInfo("maghrib", "Akşam", "Maghrib", "Maghrib", "المغرب"),
+                    PrayerToggleInfo("isha", "Yatsı", "Isha", "Isha", "العشاء"),
                 )
 
-                toggles.forEach { toggle ->
+                // On-time + before-time states from DataStore
+                val onTimeStates = remember {
+                    mutableStateMapOf<String, Boolean>().apply {
+                        prayerToggles.forEach { p ->
+                            val prefKey = androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_${p.key}")
+                            val value = try { kotlinx.coroutines.runBlocking { context.dataStore.data.first()[prefKey] ?: true } } catch (_: Exception) { true }
+                            put(p.key, value)
+                        }
+                    }
+                }
+                val beforeTimeStates = remember {
+                    mutableStateMapOf<String, Boolean>().apply {
+                        prayerToggles.forEach { p ->
+                            val prefKey = androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_before_${p.key}")
+                            val value = try { kotlinx.coroutines.runBlocking { context.dataStore.data.first()[prefKey] ?: false } } catch (_: Exception) { false }
+                            put(p.key, value)
+                        }
+                    }
+                }
+
+                val scope = rememberCoroutineScope()
+                fun saveOnTimePref(prayerKey: String, enabled: Boolean) {
+                    onTimeStates[prayerKey] = enabled
+                    scope.launch {
+                        context.dataStore.edit { prefs ->
+                            prefs[androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_$prayerKey")] = enabled
+                        }
+                    }
+                    if (prayerNotifEnabled) BootReceiver.runOnce(context)
+                }
+                fun saveBeforeTimePref(prayerKey: String, enabled: Boolean) {
+                    beforeTimeStates[prayerKey] = enabled
+                    scope.launch {
+                        context.dataStore.edit { prefs ->
+                            prefs[androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_before_$prayerKey")] = enabled
+                        }
+                    }
+                    if (prayerNotifEnabled) BootReceiver.runOnce(context)
+                }
+
+                // Table header
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = t("Vaktinde", "On Time", "Zur Zeit", "في الوقت"),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = primary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.width(70.dp)
+                    )
+                    Text(
+                        text = t("30 dk\nÖnce", "30 min\nBefore", "30 Min.\nVorher", "قبل\n30 د"),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = primary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 14.sp,
+                        modifier = Modifier.width(70.dp)
+                    )
+                }
+
+                prayerToggles.forEach { prayer ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .padding(vertical = 1.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            t(toggle.nameTr, toggle.nameEn, toggle.nameDe, toggle.nameAr),
+                            t(prayer.nameTr, prayer.nameEn, prayer.nameDe, prayer.nameAr),
                             fontSize = 14.sp,
                             color = onSurface,
-                            modifier = Modifier.padding(start = 8.dp)
+                            modifier = Modifier.weight(1f)
                         )
-                        Switch(
-                            checked = toggle.value,
-                            onCheckedChange = toggle.onChange,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = primary,
-                                uncheckedThumbColor = onSurfaceVariant,
-                                uncheckedTrackColor = surfaceVariant
+                        // On time toggle
+                        Box(modifier = Modifier.width(70.dp), contentAlignment = Alignment.Center) {
+                            if (prayer.hasOnTime) {
+                                Switch(
+                                    checked = onTimeStates[prayer.key] ?: true,
+                                    onCheckedChange = { saveOnTimePref(prayer.key, it) },
+                                    modifier = Modifier.height(32.dp),
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = primary,
+                                        uncheckedThumbColor = onSurfaceVariant,
+                                        uncheckedTrackColor = surfaceVariant
+                                    )
+                                )
+                            }
+                        }
+                        // Before time toggle
+                        Box(modifier = Modifier.width(70.dp), contentAlignment = Alignment.Center) {
+                            Switch(
+                                checked = beforeTimeStates[prayer.key] ?: false,
+                                onCheckedChange = { saveBeforeTimePref(prayer.key, it) },
+                                modifier = Modifier.height(32.dp),
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = primary,
+                                    uncheckedThumbColor = onSurfaceVariant,
+                                    uncheckedTrackColor = surfaceVariant
+                                )
                             )
-                        )
+                        }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = t(
+                        "\"30 dk Önce\" seçili vakitler için 30 dakika öncesinden bildirim alırsınız.",
+                        "You'll receive a notification 30 minutes before for prayers with \"30 min Before\" enabled.",
+                        "Sie erhalten 30 Min. vorher eine Benachrichtigung.",
+                        "ستتلقى إشعاراً قبل 30 دقيقة من أوقات الصلاة المحددة."
+                    ),
+                    fontSize = 11.sp,
+                    color = onSurfaceVariant,
+                    lineHeight = 14.sp,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
 
