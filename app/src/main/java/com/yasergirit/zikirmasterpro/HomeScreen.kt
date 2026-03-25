@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.yasergirit.zikirmasterpro.ui.theme.*
 import kotlin.coroutines.resume
@@ -922,6 +923,24 @@ internal suspend fun fetchPrayerTimesForHome(context: Context): Triple<List<Pray
             val monthName = SimpleDateFormat("MMMM", Locale("tr", "TR")).format(cal.time)
             val dayName = SimpleDateFormat("EEEE", Locale("tr", "TR")).format(cal.time)
             val gregStr = "$gregDay $monthName $gregYear $dayName"
+
+            // Save prayer times to DataStore so alarms use the same times
+            try {
+                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                val timesJson = JSONObject().apply {
+                    put("date", today)
+                    put("Fajr", timings.getString("Fajr"))
+                    put("Sunrise", timings.getString("Sunrise"))
+                    put("Dhuhr", timings.getString("Dhuhr"))
+                    put("Asr", timings.getString("Asr"))
+                    put("Maghrib", timings.getString("Maghrib"))
+                    put("Isha", timings.getString("Isha"))
+                }
+                val prefKey = androidx.datastore.preferences.core.stringPreferencesKey("cached_prayer_times")
+                context.dataStore.edit { prefs ->
+                    prefs[prefKey] = timesJson.toString()
+                }
+            } catch (_: Exception) {}
 
             Triple(prayerList, hijriStr, gregStr)
         } else null

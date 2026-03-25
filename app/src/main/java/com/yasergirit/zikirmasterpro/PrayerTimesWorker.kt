@@ -59,11 +59,19 @@ class PrayerTimesWorker(
                 val (lat, lng) = location
                 Log.d(TAG, "Location: $lat, $lng")
 
-                // API'den namaz vakitlerini çek
-                val prayerTimes = fetchPrayerTimes(lat, lng)
-                if (prayerTimes == null) {
-                    Log.e(TAG, "Could not fetch prayer times")
-                    return@withContext Result.retry()
+                // Önce HomeScreen'in kaydettiği vakitleri kontrol et (tek kaynak prensibi)
+                val cachedTimes = getCachedPrayerTimes()
+                val prayerTimes = if (cachedTimes != null) {
+                    Log.d(TAG, "Using cached prayer times from HomeScreen: $cachedTimes")
+                    cachedTimes
+                } else {
+                    // Cache yoksa API'den çek (ilk açılış veya cache süresi dolmuş)
+                    val fetched = fetchPrayerTimes(lat, lng)
+                    if (fetched == null) {
+                        Log.e(TAG, "Could not fetch prayer times")
+                        return@withContext Result.retry()
+                    }
+                    fetched
                 }
 
                 Log.d(TAG, "Prayer times: $prayerTimes")
@@ -135,6 +143,25 @@ class PrayerTimesWorker(
             val prefKey = stringPreferencesKey(key)
             context.dataStore.data.first()[prefKey] ?: default
         } catch (e: Exception) { default }
+    }
+
+    private suspend fun getCachedPrayerTimes(): Map<String, String>? {
+        return try {
+            val prefKey = stringPreferencesKey("cached_prayer_times")
+            val json = context.dataStore.data.first()[prefKey] ?: return null
+            val obj = JSONObject(json)
+            val cachedDate = obj.getString("date")
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+            if (cachedDate != today) return null // Eski tarihli cache'i kullanma
+            mapOf(
+                "Fajr" to obj.getString("Fajr"),
+                "Sunrise" to obj.getString("Sunrise"),
+                "Dhuhr" to obj.getString("Dhuhr"),
+                "Asr" to obj.getString("Asr"),
+                "Maghrib" to obj.getString("Maghrib"),
+                "Isha" to obj.getString("Isha")
+            )
+        } catch (_: Exception) { null }
     }
 
     private suspend fun fetchPrayerTimes(lat: Double, lng: Double): Map<String, String>? {
