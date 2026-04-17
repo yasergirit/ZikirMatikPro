@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -32,7 +33,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -608,19 +611,31 @@ fun HomeTab(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = if (isDarkTheme) {
-                                listOf(Color(0xFF243727), Color(0xFF12201A))
-                            } else {
-                                listOf(Color(0xFFFFF8E1), Color(0xFFE6F4EA))
-                            }
-                        )
-                    )
-                    .padding(18.dp)
             ) {
+                Image(
+                    painter = painterResource(id = R.drawable.freepik_islamic_pattern_bg),
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.Crop,
+                    alpha = if (isDarkTheme) 0.16f else 0.34f
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = if (isDarkTheme) {
+                                    listOf(Color(0xD81A2B1F), Color(0xEE0E1A15))
+                                } else {
+                                    listOf(Color(0xDFFFF9E8), Color(0xE6E8F5EC))
+                                }
+                            )
+                        )
+                )
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                 Text(
