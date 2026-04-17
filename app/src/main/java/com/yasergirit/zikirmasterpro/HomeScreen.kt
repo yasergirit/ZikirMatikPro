@@ -617,7 +617,7 @@ fun HomeTab(
                     contentDescription = null,
                     modifier = Modifier.matchParentSize(),
                     contentScale = ContentScale.Crop,
-                    alpha = if (isDarkTheme) 0.16f else 0.34f
+                    alpha = if (isDarkTheme) 0.36f else 1f
                 )
                 Box(
                     modifier = Modifier
@@ -625,9 +625,9 @@ fun HomeTab(
                         .background(
                             Brush.verticalGradient(
                                 colors = if (isDarkTheme) {
-                                    listOf(Color(0xD81A2B1F), Color(0xEE0E1A15))
+                                    listOf(Color(0xB8122118), Color(0xD80A1510))
                                 } else {
-                                    listOf(Color(0xDFFFF9E8), Color(0xE6E8F5EC))
+                                    listOf(Color(0x55FFF4D6), Color(0x66E7F2E8))
                                 }
                             )
                         )
