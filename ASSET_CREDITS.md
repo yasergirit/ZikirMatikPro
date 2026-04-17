@@ -9,3 +9,18 @@
   - Source: https://www.freepik.com/free-vector/flat-arabic-pattern-background_15365516.htm
   - Preview image: https://img.freepik.com/free-vector/flat-arabic-pattern-background_79603-1826.jpg
   - Author/page credit shown by Freepik as `coolvector`.
+
+- `app/src/main/res/drawable-nodpi/weather_sunny_bg.jpg`
+  - Source: https://commons.wikimedia.org/wiki/File:Sunny_sky_(19776125426).jpg
+  - License: CC BY 2.0
+  - Author/page credit shown by Wikimedia Commons as `Paul van de Velde`.
+
+- `app/src/main/res/drawable-nodpi/weather_rainy_bg.gif`
+  - Source: https://pixabay.com/gifs/rain-weather-season-water-drops-16599/
+  - License: Pixabay Content License
+  - Author/page credit shown by Pixabay as `susan-lu4esm`.
+
+- `app/src/main/res/drawable-nodpi/weather_cloudy_bg.gif`
+  - Source: https://pixabay.com/gifs/sun-cloud-weather-cloudy-6235/
+  - License: Pixabay Content License
+  - Author/page credit shown by Pixabay as `viaductk`.

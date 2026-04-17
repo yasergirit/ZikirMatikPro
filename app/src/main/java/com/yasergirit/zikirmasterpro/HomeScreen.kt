@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.LocationManager
 import android.util.Log
+import androidx.annotation.DrawableRes
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -44,6 +45,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.yasergirit.zikirmasterpro.ui.theme.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -274,6 +277,10 @@ fun HomeTab(
     val onSurface = MaterialTheme.colorScheme.onSurface
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val currentWeatherCode = weatherDays.firstOrNull()?.weatherCode
+    val topWeatherBackground = remember(currentWeatherCode) {
+        weatherBackgroundForHomeCard(currentWeatherCode)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -288,44 +295,68 @@ fun HomeTab(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
+                        containerColor = Color.Transparent
                     )
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            if (cityName.isNotEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(topWeatherBackground)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = if (isDarkTheme) {
+                                            listOf(Color(0xD80A1616), Color(0x99112424), Color(0x66112424))
+                                        } else {
+                                            listOf(Color(0xDDF2FFF5), Color(0xB8F2FFF5), Color(0x66FFFFFF))
+                                        }
+                                    )
+                                )
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                if (cityName.isNotEmpty()) {
+                                    Text(
+                                        text = cityName,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = onSurface
+                                    )
+                                }
                                 Text(
-                                    text = cityName,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = onSurface
+                                    text = t("Diyanet Takvimi", "Diyanet Calendar", "Diyanet-Kalender", "تقويم الديانة"),
+                                    fontSize = 12.sp,
+                                    color = onSurfaceVariant
                                 )
                             }
-                            Text(
-                                text = t("Diyanet Takvimi", "Diyanet Calendar", "Diyanet-Kalender", "تقويم الديانة"),
-                                fontSize = 12.sp,
-                                color = onSurfaceVariant
-                            )
-                        }
-                        if (weatherDays.isNotEmpty()) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                weatherDays.forEach { day ->
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(
-                                            text = weatherCodeToEmoji(day.weatherCode),
-                                            fontSize = 22.sp
-                                        )
-                                        Text(
-                                            text = day.dayName,
-                                            fontSize = 10.sp,
-                                            color = onSurfaceVariant
-                                        )
+                            if (weatherDays.isNotEmpty()) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    weatherDays.forEach { day ->
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = weatherCodeToEmoji(day.weatherCode),
+                                                fontSize = 22.sp
+                                            )
+                                            Text(
+                                                text = day.dayName,
+                                                fontSize = 10.sp,
+                                                color = onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1221,6 +1252,15 @@ internal data class WeatherDay(
     val minTemp: Int,
     val weatherCode: Int
 )
+
+@DrawableRes
+private fun weatherBackgroundForHomeCard(code: Int?): Int = when (code) {
+    0, 1 -> R.drawable.weather_sunny_bg
+    2, 3, 45, 48 -> R.drawable.weather_cloudy_bg
+    in 51..67, in 80..82, in 95..99 -> R.drawable.weather_rainy_bg
+    in 71..77, in 85..86 -> R.drawable.weather_cloudy_bg
+    else -> R.drawable.weather_cloudy_bg
+}
 
 @SuppressLint("MissingPermission")
 private suspend fun getLocationForHome(context: Context): Pair<Double, Double>? {
