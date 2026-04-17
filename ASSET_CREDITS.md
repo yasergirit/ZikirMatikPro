@@ -20,7 +20,7 @@
   - License: Pixabay Content License
   - Author/page credit shown by Pixabay as `susan-lu4esm`.
 
-- `app/src/main/res/drawable-nodpi/weather_cloudy_bg.gif`
-  - Source: https://pixabay.com/gifs/sun-cloud-weather-cloudy-6235/
-  - License: Pixabay Content License
-  - Author/page credit shown by Pixabay as `viaductk`.
+- `app/src/main/res/drawable-nodpi/weather_cloudy_bg.jpg`
+  - Source: https://www.freepik.com/free-photo/black-rain-abstract-dark-power_1046114.htm
+  - Preview image used: https://cdn.massa.com.br/uploads/2024/11/black-rain-abstract-dark-power-scaled-1-1024x683.jpg
+  - Credit shown on source mirrors as `Freepik`.
