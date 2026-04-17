@@ -350,13 +350,33 @@ fun HomeTab(
                     .height(320.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
+                    containerColor = Color.Transparent
                 )
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.freepik_prayer_pattern_bg),
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                        alpha = if (isDarkTheme) 0.28f else 1f
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = if (isDarkTheme) {
+                                        listOf(Color(0xDD112018), Color(0xEF07120E))
+                                    } else {
+                                        listOf(Color(0xA8EFF8F0), Color(0xCDE5F3E8))
+                                    }
+                                )
+                            )
+                    )
                     CircularProgressIndicator(color = primary)
                 }
             }
@@ -418,15 +438,36 @@ fun HomeTab(
                     .height(320.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
+                    containerColor = Color.Transparent
                 )
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(id = R.drawable.freepik_prayer_pattern_bg),
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                        alpha = if (isDarkTheme) 0.28f else 1f
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = if (isDarkTheme) {
+                                        listOf(Color(0xDD112018), Color(0xEF07120E))
+                                    } else {
+                                        listOf(Color(0xA8EFF8F0), Color(0xCDE5F3E8))
+                                    }
+                                )
+                            )
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                     // Current/Next Prayer Name
                     val displayPrayerName = if (currentPrayer != null) {
                         when (selectedLanguage) { "en" -> currentPrayer.nameEn; "de" -> currentPrayer.nameDe.ifEmpty { currentPrayer.nameEn }; "ar" -> currentPrayer.nameAr.ifEmpty { currentPrayer.nameEn }; else -> currentPrayer.nameTr }
@@ -539,6 +580,7 @@ fun HomeTab(
                         }
                     }
                 }
+            }
             }
         } else {
             // Permission granted but API failed - show error with retry
