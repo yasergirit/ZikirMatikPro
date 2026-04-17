@@ -9,12 +9,16 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.database.ContentObserver
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 
@@ -43,13 +47,20 @@ class EzanService : Service() {
     private var mediaPlayer: MediaPlayer? = null
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
+    private var volumeObserver: ContentObserver? = null
 
-    // Volume tuşu / ses kapat algılama
-    private val volumeReceiver = object : BroadcastReceiver() {
+    // Telefonla etkileşim algılanınca ezanı hemen sustur.
+    private val interactionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
-                // Kulaklık çıkarıldı vb.
-                stopEzan()
+            when (intent.action) {
+                AudioManager.ACTION_AUDIO_BECOMING_NOISY,
+                Intent.ACTION_SCREEN_ON,
+                Intent.ACTION_SCREEN_OFF,
+                Intent.ACTION_USER_PRESENT,
+                Intent.ACTION_CLOSE_SYSTEM_DIALOGS -> {
+                    Log.d(TAG, "Stopping adhan due to phone interaction: ${intent.action}")
+                    stopEzan()
+                }
             }
         }
     }
@@ -75,9 +86,8 @@ class EzanService : Service() {
         createNotificationChannel()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-        // BECOMING_NOISY receiver
-        val filter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
-        registerReceiver(volumeReceiver, filter)
+        registerInteractionReceiver()
+        registerVolumeObserver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -171,6 +181,54 @@ class EzanService : Service() {
         stopSelf()
     }
 
+    private fun registerInteractionReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(interactionReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(interactionReceiver, filter)
+        }
+    }
+
+    private fun registerVolumeObserver() {
+        volumeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                super.onChange(selfChange)
+                Log.d(TAG, "Stopping adhan due to volume key interaction")
+                stopEzan()
+            }
+        }
+
+        try {
+            val observer = volumeObserver ?: return
+            contentResolver.registerContentObserver(
+                Settings.System.getUriFor("volume_alarm"),
+                false,
+                observer
+            )
+            contentResolver.registerContentObserver(
+                Settings.System.getUriFor("volume_music"),
+                false,
+                observer
+            )
+            contentResolver.registerContentObserver(
+                Settings.System.getUriFor("volume_ring"),
+                false,
+                observer
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Volume observer could not be registered", e)
+        }
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -216,7 +274,9 @@ class EzanService : Service() {
     }
 
     override fun onDestroy() {
-        try { unregisterReceiver(volumeReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(interactionReceiver) } catch (_: Exception) {}
+        try { volumeObserver?.let { contentResolver.unregisterContentObserver(it) } } catch (_: Exception) {}
+        volumeObserver = null
         mediaPlayer?.let {
             try { it.release() } catch (_: Exception) {}
         }

@@ -1699,9 +1699,8 @@ private fun SettingsTab(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // ── Namaz Vakti Bildirimleri ──
+        // ── Ezan Sesi Bildirimleri ──
         var prayerNotifEnabled by remember { mutableStateOf(true) }
-        var ezanSoundEnabled by remember { mutableStateOf(true) }
         var prayerMethod by remember { mutableStateOf("13") }
         var methodDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -1733,8 +1732,60 @@ private fun SettingsTab(
         // Load prayer prefs
         LaunchedEffect(Unit) {
             prayerNotifEnabled = loadBooleanPref(context, "prayer_notif_enabled", true)
-            ezanSoundEnabled = loadBooleanPref(context, "ezan_sound_enabled", true)
             prayerMethod = loadStringPref(context, "prayer_method", "13")
+        }
+
+        data class PrayerToggleInfo(
+            val key: String, val nameTr: String, val nameEn: String,
+            val nameDe: String = "", val nameAr: String = "",
+            val hasOnTime: Boolean = true
+        )
+        val prayerToggles = listOf(
+            PrayerToggleInfo("fajr", "İmsak", "Fajr", "Fajr", "الفجر"),
+            PrayerToggleInfo("sunrise", "Güneş", "Sunrise", "Sunrise", "الشروق", hasOnTime = false),
+            PrayerToggleInfo("dhuhr", "Öğle", "Dhuhr", "Dhuhr", "الظهر"),
+            PrayerToggleInfo("asr", "İkindi", "Asr", "Asr", "العصر"),
+            PrayerToggleInfo("maghrib", "Akşam", "Maghrib", "Maghrib", "المغرب"),
+            PrayerToggleInfo("isha", "Yatsı", "Isha", "Isha", "العشاء"),
+        )
+
+        val onTimeStates = remember {
+            mutableStateMapOf<String, Boolean>().apply {
+                prayerToggles.forEach { p ->
+                    val prefKey = androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_${p.key}")
+                    val value = try { kotlinx.coroutines.runBlocking { context.dataStore.data.first()[prefKey] ?: true } } catch (_: Exception) { true }
+                    put(p.key, value)
+                }
+            }
+        }
+        val beforeTimeStates = remember {
+            mutableStateMapOf<String, Boolean>().apply {
+                prayerToggles.forEach { p ->
+                    val prefKey = androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_before_${p.key}")
+                    val value = try { kotlinx.coroutines.runBlocking { context.dataStore.data.first()[prefKey] ?: false } } catch (_: Exception) { false }
+                    put(p.key, value)
+                }
+            }
+        }
+
+        val scope = rememberCoroutineScope()
+        fun saveOnTimePref(prayerKey: String, enabled: Boolean) {
+            onTimeStates[prayerKey] = enabled
+            scope.launch {
+                context.dataStore.edit { prefs ->
+                    prefs[androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_$prayerKey")] = enabled
+                }
+            }
+            if (prayerNotifEnabled) BootReceiver.runOnce(context)
+        }
+        fun saveBeforeTimePref(prayerKey: String, enabled: Boolean) {
+            beforeTimeStates[prayerKey] = enabled
+            scope.launch {
+                context.dataStore.edit { prefs ->
+                    prefs[androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_before_$prayerKey")] = enabled
+                }
+            }
+            if (prayerNotifEnabled) BootReceiver.runOnce(context)
         }
 
         SettingsSectionCard(cardColor = cardColor) {
@@ -1745,13 +1796,13 @@ private fun SettingsTab(
             ) {
                 Column {
                     Text(
-                        t("Namaz Vakti Bildirimleri", "Prayer Time Notifications", "Gebetszeit-Benachrichtigungen", "إشعارات أوقات الصلاة"),
+                        t("Ezan Sesi Bildirimleri", "Adhan Sound Notifications", "Gebetsruf-Benachrichtigungen", "إشعارات صوت الأذان"),
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 15.sp,
                         color = onSurface
                     )
                     Text(
-                        t("Namaz vakitlerinde bildirim al", "Get notified at prayer times", "Benachrichtigungen zu Gebetszeiten erhalten", "تلقي إشعارات في أوقات الصلاة"),
+                        t("Vakitlerde ezan sesi ve bildirim al", "Hear adhan and get notified at prayer times", "Gebetsruf und Benachrichtigungen zu Gebetszeiten", "سماع الأذان وتلقي الإشعارات في أوقات الصلاة"),
                         fontSize = 11.sp,
                         color = onSurfaceVariant
                     )
@@ -1837,98 +1888,6 @@ private fun SettingsTab(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
 
-                // Ezan Sesi toggle
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.padding(start = 8.dp)) {
-                        Text(
-                            t("Ezan Sesi", "Adhan Sound", "Gebetsruf", "صوت الأذان"),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = onSurface
-                        )
-                        Text(
-                            t("Ayasofya ezan sesi", "Hagia Sophia adhan", "Hagia Sophia Gebetsruf", "أذان آيا صوفيا"),
-                            fontSize = 11.sp,
-                            color = onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = ezanSoundEnabled,
-                        onCheckedChange = {
-                            ezanSoundEnabled = it
-                            saveBooleanPref(context, "ezan_sound_enabled", it)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = primary,
-                            uncheckedThumbColor = onSurfaceVariant,
-                            uncheckedTrackColor = surfaceVariant
-                        )
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
-
-                data class PrayerToggleInfo(
-                    val key: String, val nameTr: String, val nameEn: String,
-                    val nameDe: String = "", val nameAr: String = "",
-                    val hasOnTime: Boolean = true
-                )
-                val prayerToggles = listOf(
-                    PrayerToggleInfo("fajr", "İmsak", "Fajr", "Fajr", "الفجر"),
-                    PrayerToggleInfo("sunrise", "Güneş", "Sunrise", "Sunrise", "الشروق", hasOnTime = false),
-                    PrayerToggleInfo("dhuhr", "Öğle", "Dhuhr", "Dhuhr", "الظهر"),
-                    PrayerToggleInfo("asr", "İkindi", "Asr", "Asr", "العصر"),
-                    PrayerToggleInfo("maghrib", "Akşam", "Maghrib", "Maghrib", "المغرب"),
-                    PrayerToggleInfo("isha", "Yatsı", "Isha", "Isha", "العشاء"),
-                )
-
-                // On-time + before-time states from DataStore
-                val onTimeStates = remember {
-                    mutableStateMapOf<String, Boolean>().apply {
-                        prayerToggles.forEach { p ->
-                            val prefKey = androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_${p.key}")
-                            val value = try { kotlinx.coroutines.runBlocking { context.dataStore.data.first()[prefKey] ?: true } } catch (_: Exception) { true }
-                            put(p.key, value)
-                        }
-                    }
-                }
-                val beforeTimeStates = remember {
-                    mutableStateMapOf<String, Boolean>().apply {
-                        prayerToggles.forEach { p ->
-                            val prefKey = androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_before_${p.key}")
-                            val value = try { kotlinx.coroutines.runBlocking { context.dataStore.data.first()[prefKey] ?: false } } catch (_: Exception) { false }
-                            put(p.key, value)
-                        }
-                    }
-                }
-
-                val scope = rememberCoroutineScope()
-                fun saveOnTimePref(prayerKey: String, enabled: Boolean) {
-                    onTimeStates[prayerKey] = enabled
-                    scope.launch {
-                        context.dataStore.edit { prefs ->
-                            prefs[androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_$prayerKey")] = enabled
-                        }
-                    }
-                    if (prayerNotifEnabled) BootReceiver.runOnce(context)
-                }
-                fun saveBeforeTimePref(prayerKey: String, enabled: Boolean) {
-                    beforeTimeStates[prayerKey] = enabled
-                    scope.launch {
-                        context.dataStore.edit { prefs ->
-                            prefs[androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_before_$prayerKey")] = enabled
-                        }
-                    }
-                    if (prayerNotifEnabled) BootReceiver.runOnce(context)
-                }
-
                 // Table header
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
@@ -1941,15 +1900,6 @@ private fun SettingsTab(
                         fontWeight = FontWeight.Bold,
                         color = primary,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.width(70.dp)
-                    )
-                    Text(
-                        text = t("30 dk\nÖnce", "30 min\nBefore", "30 Min.\nVorher", "قبل\n30 د"),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = primary,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 14.sp,
                         modifier = Modifier.width(70.dp)
                     )
                 }
@@ -1983,36 +1933,8 @@ private fun SettingsTab(
                                 )
                             }
                         }
-                        // Before time toggle
-                        Box(modifier = Modifier.width(70.dp), contentAlignment = Alignment.Center) {
-                            Switch(
-                                checked = beforeTimeStates[prayer.key] ?: false,
-                                onCheckedChange = { saveBeforeTimePref(prayer.key, it) },
-                                modifier = Modifier.height(32.dp),
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = primary,
-                                    uncheckedThumbColor = onSurfaceVariant,
-                                    uncheckedTrackColor = surfaceVariant
-                                )
-                            )
-                        }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = t(
-                        "\"30 dk Önce\" seçili vakitler için 30 dakika öncesinden bildirim alırsınız.",
-                        "You'll receive a notification 30 minutes before for prayers with \"30 min Before\" enabled.",
-                        "Sie erhalten 30 Min. vorher eine Benachrichtigung.",
-                        "ستتلقى إشعاراً قبل 30 دقيقة من أوقات الصلاة المحددة."
-                    ),
-                    fontSize = 11.sp,
-                    color = onSurfaceVariant,
-                    lineHeight = 14.sp,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = surfaceVariant)
 
@@ -2088,6 +2010,116 @@ private fun SettingsTab(
                     }
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ── Ayet & Hadis Bildirimleri ──
+        SettingsSectionCard(cardColor = cardColor) {
+            Column {
+                Text(
+                    t("Ayet & Hadis Bildirimleri", "Verse & Hadith Notifications", "Vers- & Hadith-Benachrichtigungen", "إشعارات الآيات والأحاديث"),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    color = onSurface
+                )
+                Text(
+                    t(
+                        "Vakit bildirimlerinde ayet, 30 dakika önce hadis al",
+                        "Receive verses at prayer time and hadiths 30 minutes before",
+                        "Verse zur Gebetszeit und Hadithe 30 Minuten vorher erhalten",
+                        "استقبل آيات وقت الصلاة وأحاديث قبلها بثلاثين دقيقة"
+                    ),
+                    fontSize = 11.sp,
+                    color = onSurfaceVariant,
+                    lineHeight = 14.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (!prayerNotifEnabled) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = surfaceVariant.copy(alpha = 0.45f)
+                ) {
+                    Text(
+                        t(
+                            "Bu bildirimler için Ezan Sesi Bildirimleri açık olmalı.",
+                            "Turn on Adhan Sound Notifications to use these alerts.",
+                            "Aktivieren Sie Gebetsruf-Benachrichtigungen für diese Hinweise.",
+                            "فعّل إشعارات صوت الأذان لاستخدام هذه التنبيهات."
+                        ),
+                        modifier = Modifier.padding(12.dp),
+                        fontSize = 12.sp,
+                        color = onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = t("30 dk\nÖnce", "30 min\nBefore", "30 Min.\nVorher", "قبل\n30 د"),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = primary,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 14.sp,
+                    modifier = Modifier.width(70.dp)
+                )
+            }
+
+            prayerToggles.forEach { prayer ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 1.dp, horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        t(prayer.nameTr, prayer.nameEn, prayer.nameDe, prayer.nameAr),
+                        fontSize = 14.sp,
+                        color = onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(modifier = Modifier.width(70.dp), contentAlignment = Alignment.Center) {
+                        Switch(
+                            checked = beforeTimeStates[prayer.key] ?: false,
+                            onCheckedChange = { saveBeforeTimePref(prayer.key, it) },
+                            modifier = Modifier.height(32.dp),
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = primary,
+                                uncheckedThumbColor = onSurfaceVariant,
+                                uncheckedTrackColor = surfaceVariant
+                            )
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = t(
+                    "\"30 dk Önce\" seçili vakitler için 30 dakika öncesinden hadis bildirimi alırsınız.",
+                    "You'll receive a hadith notification 30 minutes before selected prayer times.",
+                    "Sie erhalten 30 Minuten vorher eine Hadith-Benachrichtigung.",
+                    "ستتلقى إشعار حديث قبل 30 دقيقة من أوقات الصلاة المحددة."
+                ),
+                fontSize = 11.sp,
+                color = onSurfaceVariant,
+                lineHeight = 14.sp,
+                modifier = Modifier.padding(start = 8.dp)
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
