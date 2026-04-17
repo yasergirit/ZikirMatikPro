@@ -661,6 +661,9 @@ private fun CounterScreen(activity: android.app.Activity) {
             // ── Daha Fazla Paneli ──
             if (showMorePanel) {
                 var moreSubPage by remember { mutableStateOf("") } // "" = grid, "settings" = ayarlar
+                var showVerseStory by remember { mutableStateOf(false) }
+                var showHadithStory by remember { mutableStateOf(false) }
+                var showQuoteStory by remember { mutableStateOf(false) }
 
                 Box(
                     modifier = Modifier
@@ -691,6 +694,38 @@ private fun CounterScreen(activity: android.app.Activity) {
                                 Spacer(modifier = Modifier.height(24.dp))
 
                                 val morePanelCardColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    MorePanelItem(
+                                        emoji = "\uD83D\uDCD6",
+                                        label = t("Ayet", "Verse", "Vers", "\u0622\u064A\u0629"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { showVerseStory = true }
+                                    )
+                                    MorePanelItem(
+                                        emoji = "\u262A\uFE0F",
+                                        label = t("Hadis", "Hadith", "Hadith", "\u062D\u062F\u064A\u062B"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { showHadithStory = true }
+                                    )
+                                    MorePanelItem(
+                                        emoji = "\u2728",
+                                        label = t("\u00D6zl\u00FC S\u00F6zler", "Wise Quotes", "Weisheiten", "\u062D\u0643\u0645"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { showQuoteStory = true }
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -855,6 +890,25 @@ private fun CounterScreen(activity: android.app.Activity) {
                                 )
                             }
                         }
+                    }
+
+                    if (showVerseStory) {
+                        VerseStoryOverlay(
+                            selectedLanguage = selectedLanguage,
+                            onDismiss = { showVerseStory = false }
+                        )
+                    }
+                    if (showHadithStory) {
+                        HadithStoryOverlay(
+                            selectedLanguage = selectedLanguage,
+                            onDismiss = { showHadithStory = false }
+                        )
+                    }
+                    if (showQuoteStory) {
+                        QuoteStoryOverlay(
+                            selectedLanguage = selectedLanguage,
+                            onDismiss = { showQuoteStory = false }
+                        )
                     }
                 }
             }
