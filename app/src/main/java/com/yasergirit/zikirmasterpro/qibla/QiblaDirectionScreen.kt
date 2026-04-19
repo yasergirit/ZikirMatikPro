@@ -1,7 +1,9 @@
 package com.yasergirit.zikirmasterpro.qibla
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.hardware.GeomagneticField
 import android.hardware.Sensor
@@ -11,10 +13,7 @@ import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
-import android.os.Build
 import android.os.Bundle
-import android.view.Surface as ViewSurface
-import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
@@ -99,6 +98,18 @@ fun QiblaDirectionScreen(
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
     val cardColor = if (isDarkTheme) DarkCard else LightCard
+
+    DisposableEffect(context) {
+        val activity = context as? Activity
+        val previousOrientation = activity?.requestedOrientation
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+
+        onDispose {
+            if (previousOrientation != null) {
+                activity?.requestedOrientation = previousOrientation
+            }
+        }
+    }
 
     var permissionGranted by remember { mutableStateOf(hasLocationPermission(context)) }
     var locationEnabled by remember { mutableStateOf(isLocationEnabled(context)) }
@@ -197,7 +208,6 @@ fun QiblaDirectionScreen(
         val gravity = FloatArray(3)
         val geomagnetic = FloatArray(3)
         val rotationMatrix = FloatArray(9)
-        val remappedMatrix = FloatArray(9)
         val orientation = FloatArray(3)
         var hasGravity = false
         var hasGeomagnetic = false
@@ -214,9 +224,7 @@ fun QiblaDirectionScreen(
         }
 
         fun publishMatrix(matrix: FloatArray) {
-            val (axisX, axisY) = rotationAxes(displayRotation(context))
-            SensorManager.remapCoordinateSystem(matrix, axisX, axisY, remappedMatrix)
-            SensorManager.getOrientation(remappedMatrix, orientation)
+            SensorManager.getOrientation(matrix, orientation)
             publishHeading(normalizeDegrees(Math.toDegrees(orientation[0].toDouble()).toFloat()))
         }
 
@@ -270,18 +278,18 @@ fun QiblaDirectionScreen(
         }
     }
 
-    val heading = magneticHeading?.let { normalizeDegrees(animatedHeading) }
+    val magneticCompassHeading = magneticHeading?.let { normalizeDegrees(animatedHeading) }
+    val trueHeading = magneticCompassHeading?.let { normalizeDegrees(it + magneticDeclination(location)) }
     val qiblaTrueBearing = location?.let { calculateQiblaBearing(it.latitude, it.longitude) }
-    val qiblaCompassBearing = qiblaTrueBearing?.let { normalizeDegrees(it - magneticDeclination(location)) }
-    val qiblaRelativeAngle = if (heading != null && qiblaCompassBearing != null) {
-        normalizeDegrees(qiblaCompassBearing - heading)
+    val qiblaRelativeAngle = if (trueHeading != null && qiblaTrueBearing != null) {
+        normalizeDegrees(qiblaTrueBearing - trueHeading)
     } else {
         0f
     }
     val turnAmount = if (qiblaRelativeAngle > 180f) 360f - qiblaRelativeAngle else qiblaRelativeAngle
     val turnRight = qiblaRelativeAngle <= 180f
-    val isFacingQibla = heading != null && qiblaCompassBearing != null && turnAmount <= FACING_QIBLA_TOLERANCE
-    val isReady = sensorAvailable && permissionGranted && locationEnabled && location != null && heading != null
+    val isFacingQibla = trueHeading != null && qiblaTrueBearing != null && turnAmount <= FACING_QIBLA_TOLERANCE
+    val isReady = sensorAvailable && permissionGranted && locationEnabled && location != null && trueHeading != null
     val accuracyText = when (sensorAccuracy) {
         SensorManager.SENSOR_STATUS_UNRELIABLE -> t("Kalibre edin", "Calibrate", "Kalibrieren", "عاير")
         SensorManager.SENSOR_STATUS_ACCURACY_LOW -> t("Düşük", "Low", "Niedrig", "منخفض")
@@ -374,7 +382,7 @@ fun QiblaDirectionScreen(
                 ) {
                     Canvas(modifier = Modifier.size(316.dp)) {
                         drawQiblaDirectionCompass(
-                            compassRotation = normalizeDegrees(-(heading ?: 0f)),
+                            compassRotation = normalizeDegrees(-(magneticCompassHeading ?: 0f)),
                             qiblaArrowAngle = qiblaRelativeAngle,
                             isReady = isReady,
                             isFacingQibla = isFacingQibla,
@@ -416,8 +424,8 @@ fun QiblaDirectionScreen(
                     isFacingQibla = isFacingQibla,
                     turnRight = turnRight,
                     turnAmount = turnAmount,
-                    qiblaBearing = qiblaCompassBearing,
-                    heading = heading,
+                    qiblaBearing = qiblaTrueBearing,
+                    heading = trueHeading,
                     accuracyText = accuracyText,
                     cardColor = cardColor,
                     primary = primary,
@@ -724,22 +732,6 @@ private fun lowPass(input: FloatArray, output: FloatArray, initialized: Boolean)
         } else {
             input[index]
         }
-    }
-}
-
-private fun rotationAxes(rotation: Int): Pair<Int, Int> = when (rotation) {
-    ViewSurface.ROTATION_90 -> SensorManager.AXIS_Y to SensorManager.AXIS_MINUS_X
-    ViewSurface.ROTATION_180 -> SensorManager.AXIS_MINUS_X to SensorManager.AXIS_MINUS_Y
-    ViewSurface.ROTATION_270 -> SensorManager.AXIS_MINUS_Y to SensorManager.AXIS_X
-    else -> SensorManager.AXIS_X to SensorManager.AXIS_Y
-}
-
-private fun displayRotation(context: Context): Int {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        context.display?.rotation ?: ViewSurface.ROTATION_0
-    } else {
-        @Suppress("DEPRECATION")
-        (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.rotation
     }
 }
 
