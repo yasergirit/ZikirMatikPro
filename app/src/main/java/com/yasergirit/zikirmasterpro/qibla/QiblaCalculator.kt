@@ -59,26 +59,4 @@ object QiblaCalculator {
         return v
     }
 
-    /**
-     * Adjusts a target angle to be within +/-180 degrees of a previous angle.
-     * This prevents animation from taking the long way around when crossing 0/360.
-     *
-     * Example: previous=350, target=10 -> returns 370 (not 10), so animation goes 350->370
-     * instead of 350->10 (which would spin backwards through 180).
-     */
-    fun sanitizeForAnimation(target: Float, previous: Float): Float {
-        val delta = target - previous
-        if (delta > 180f) return target - 360f
-        if (delta < -180f) return target + 360f
-        return target
-    }
-
-    /**
-     * Checks if the device is approximately facing Qibla direction.
-     * @param toleranceDegrees How many degrees off-center is still considered "facing Qibla"
-     */
-    fun isFacingQibla(relativeAngle: Float, toleranceDegrees: Float = 5f): Boolean {
-        val normalized = normalizeDegrees(relativeAngle)
-        return normalized < toleranceDegrees || normalized > (360f - toleranceDegrees)
-    }
 }
