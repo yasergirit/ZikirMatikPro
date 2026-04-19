@@ -374,8 +374,8 @@ fun QiblaCompassScreen(
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(324.dp)) {
                     Canvas(modifier = Modifier.size(314.dp)) {
                         drawKaabaCompass(
-                            dialRotation = QiblaCalculator.normalizeDegrees(-(trueHeading ?: 0f)),
-                            qiblaArrowAngle = qiblaArrowAngle,
+                            compassRotation = QiblaCalculator.normalizeDegrees(-(trueHeading ?: 0f)),
+                            qiblaBearing = qiblaBearing ?: 0f,
                             isFacingQibla = isFacingQibla,
                             primary = primary,
                             cardColor = cardColor,
@@ -495,8 +495,8 @@ private fun CompassMetric(
 }
 
 private fun DrawScope.drawKaabaCompass(
-    dialRotation: Float,
-    qiblaArrowAngle: Float,
+    compassRotation: Float,
+    qiblaBearing: Float,
     isFacingQibla: Boolean,
     primary: Color,
     cardColor: Color,
@@ -524,7 +524,7 @@ private fun DrawScope.drawKaabaCompass(
     drawCircle(color = primary.copy(alpha = 0.32f), radius = radius + 8f, center = center, style = Stroke(width = 3f))
     drawCircle(color = onSurfaceVariant.copy(alpha = 0.14f), radius = radius - 34f, center = center, style = Stroke(width = 1.5f))
 
-    rotate(dialRotation, pivot = center) {
+    rotate(compassRotation, pivot = center) {
         for (degree in 0 until 360 step 5) {
             val isCardinal = degree % 90 == 0
             val isMajor = degree % 30 == 0
@@ -549,28 +549,28 @@ private fun DrawScope.drawKaabaCompass(
             )
         }
         drawDialLabels(center, radius, onSurfaceVariant)
-    }
 
-    rotate(qiblaArrowAngle, pivot = center) {
-        val arrowStart = 58f
-        val arrowEnd = radius - 54f
-        val arrowColor = if (isFacingQibla) GoldLight else Gold
+        rotate(qiblaBearing, pivot = center) {
+            val arrowStart = 58f
+            val arrowEnd = radius - 54f
+            val arrowColor = if (isFacingQibla) GoldLight else Gold
 
-        drawLine(
-            color = arrowColor,
-            start = Offset(center.x, center.y - arrowStart),
-            end = Offset(center.x, center.y - arrowEnd),
-            strokeWidth = 8f,
-            cap = StrokeCap.Round
-        )
+            drawLine(
+                color = arrowColor,
+                start = Offset(center.x, center.y - arrowStart),
+                end = Offset(center.x, center.y - arrowEnd),
+                strokeWidth = 8f,
+                cap = StrokeCap.Round
+            )
 
-        val head = Path().apply {
-            moveTo(center.x, center.y - arrowEnd - 18f)
-            lineTo(center.x - 20f, center.y - arrowEnd + 23f)
-            lineTo(center.x + 20f, center.y - arrowEnd + 23f)
-            close()
+            val head = Path().apply {
+                moveTo(center.x, center.y - arrowEnd - 18f)
+                lineTo(center.x - 20f, center.y - arrowEnd + 23f)
+                lineTo(center.x + 20f, center.y - arrowEnd + 23f)
+                close()
+            }
+            drawPath(head, arrowColor)
         }
-        drawPath(head, arrowColor)
     }
 
     drawCircle(color = cardColor, radius = 44f, center = center)
