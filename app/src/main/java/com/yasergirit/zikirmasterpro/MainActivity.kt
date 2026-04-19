@@ -732,6 +732,14 @@ private fun CounterScreen(activity: android.app.Activity) {
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     MorePanelItem(
+                                        emoji = "\uD83E\uDDED",
+                                        label = t("Kabe Y\u00F6n\u00FC", "Kaaba Direction", "Kaaba-Richtung", "\u0627\u062A\u062C\u0627\u0647 \u0627\u0644\u0643\u0639\u0628\u0629"),
+                                        bgColor = morePanelCardColor,
+                                        textColor = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { moreSubPage = "qibla" }
+                                    )
+                                    MorePanelItem(
                                         emoji = "\uD83D\uDCDC",
                                         label = t("Hadis", "Hadith", "Hadith", "\u0627\u0644\u062D\u062F\u064A\u062B"),
                                         bgColor = morePanelCardColor,
@@ -747,7 +755,6 @@ private fun CounterScreen(activity: android.app.Activity) {
                                         modifier = Modifier.weight(1f),
                                         onClick = { moreSubPage = "esma" }
                                     )
-                                    Spacer(modifier = Modifier.weight(1f))
                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -774,6 +781,23 @@ private fun CounterScreen(activity: android.app.Activity) {
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
                                 }
+                            }
+                        }
+                        "qibla" -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { moreSubPage = "" }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
+                                    }
+                                    Text(t("Kabe Y\u00F6n\u00FC", "Kaaba Direction", "Kaaba-Richtung", "\u0627\u062A\u062C\u0627\u0647 \u0627\u0644\u0643\u0639\u0628\u0629"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = onSurface)
+                                }
+                                com.yasergirit.zikirmasterpro.qibla.QiblaDirectionScreen(
+                                    isDarkTheme = isDarkTheme,
+                                    selectedLanguage = selectedLanguage
+                                )
                             }
                         }
                         "hadith" -> {
