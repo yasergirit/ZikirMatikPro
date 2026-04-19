@@ -557,16 +557,16 @@ private fun DrawScope.drawKaabaCompass(
 
             drawLine(
                 color = arrowColor,
-                start = Offset(center.x, center.y - arrowStart),
-                end = Offset(center.x, center.y - arrowEnd),
+                start = Offset(center.x, center.y + arrowStart),
+                end = Offset(center.x, center.y + arrowEnd),
                 strokeWidth = 8f,
                 cap = StrokeCap.Round
             )
 
             val head = Path().apply {
-                moveTo(center.x, center.y - arrowEnd - 18f)
-                lineTo(center.x - 20f, center.y - arrowEnd + 23f)
-                lineTo(center.x + 20f, center.y - arrowEnd + 23f)
+                moveTo(center.x, center.y + arrowEnd + 18f)
+                lineTo(center.x - 20f, center.y + arrowEnd - 23f)
+                lineTo(center.x + 20f, center.y + arrowEnd - 23f)
                 close()
             }
             drawPath(head, arrowColor)
