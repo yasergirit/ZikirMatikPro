@@ -375,7 +375,7 @@ fun QiblaCompassScreen(
                     Canvas(modifier = Modifier.size(314.dp)) {
                         drawKaabaCompass(
                             compassRotation = QiblaCalculator.normalizeDegrees(-(trueHeading ?: 0f)),
-                            qiblaBearing = qiblaBearing ?: 0f,
+                            qiblaArrowAngle = qiblaArrowAngle,
                             isFacingQibla = isFacingQibla,
                             primary = primary,
                             cardColor = cardColor,
@@ -496,7 +496,7 @@ private fun CompassMetric(
 
 private fun DrawScope.drawKaabaCompass(
     compassRotation: Float,
-    qiblaBearing: Float,
+    qiblaArrowAngle: Float,
     isFacingQibla: Boolean,
     primary: Color,
     cardColor: Color,
@@ -549,28 +549,28 @@ private fun DrawScope.drawKaabaCompass(
             )
         }
         drawDialLabels(center, radius, onSurfaceVariant)
+    }
 
-        rotate(qiblaBearing, pivot = center) {
-            val arrowStart = 58f
-            val arrowEnd = radius - 54f
-            val arrowColor = if (isFacingQibla) GoldLight else Gold
+    rotate(qiblaArrowAngle, pivot = center) {
+        val arrowStart = 58f
+        val arrowEnd = radius - 54f
+        val arrowColor = if (isFacingQibla) GoldLight else Gold
 
-            drawLine(
-                color = arrowColor,
-                start = Offset(center.x, center.y + arrowStart),
-                end = Offset(center.x, center.y + arrowEnd),
-                strokeWidth = 8f,
-                cap = StrokeCap.Round
-            )
+        drawLine(
+            color = arrowColor,
+            start = Offset(center.x, center.y - arrowStart),
+            end = Offset(center.x, center.y - arrowEnd),
+            strokeWidth = 8f,
+            cap = StrokeCap.Round
+        )
 
-            val head = Path().apply {
-                moveTo(center.x, center.y + arrowEnd + 18f)
-                lineTo(center.x - 20f, center.y + arrowEnd - 23f)
-                lineTo(center.x + 20f, center.y + arrowEnd - 23f)
-                close()
-            }
-            drawPath(head, arrowColor)
+        val head = Path().apply {
+            moveTo(center.x, center.y - arrowEnd - 18f)
+            lineTo(center.x - 20f, center.y - arrowEnd + 23f)
+            lineTo(center.x + 20f, center.y - arrowEnd + 23f)
+            close()
         }
+        drawPath(head, arrowColor)
     }
 
     drawCircle(color = cardColor, radius = 44f, center = center)
