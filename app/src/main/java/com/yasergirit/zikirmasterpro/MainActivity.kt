@@ -732,14 +732,6 @@ private fun CounterScreen(activity: android.app.Activity) {
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     MorePanelItem(
-                                        emoji = "\uD83E\uDDED",
-                                        label = t("K\u0131ble", "Qibla", "Qibla", "\u0627\u0644\u0642\u0628\u0644\u0629"),
-                                        bgColor = morePanelCardColor,
-                                        textColor = onSurface,
-                                        modifier = Modifier.weight(1f),
-                                        onClick = { moreSubPage = "qibla" }
-                                    )
-                                    MorePanelItem(
                                         emoji = "\uD83D\uDCDC",
                                         label = t("Hadis", "Hadith", "Hadith", "\u0627\u0644\u062D\u062F\u064A\u062B"),
                                         bgColor = morePanelCardColor,
@@ -755,6 +747,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                                         modifier = Modifier.weight(1f),
                                         onClick = { moreSubPage = "esma" }
                                     )
+                                    Spacer(modifier = Modifier.weight(1f))
                                 }
 
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -781,23 +774,6 @@ private fun CounterScreen(activity: android.app.Activity) {
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
                                 }
-                            }
-                        }
-                        "qibla" -> {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    IconButton(onClick = { moreSubPage = "" }) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
-                                    }
-                                    Text(t("Kıble Pusulası", "Qibla Compass", "Qibla-Kompass", "بوصلة القبلة"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = onSurface)
-                                }
-                                com.yasergirit.zikirmasterpro.qibla.QiblaCompassScreen(
-                                    isDarkTheme = isDarkTheme,
-                                    selectedLanguage = selectedLanguage
-                                )
                             }
                         }
                         "hadith" -> {
