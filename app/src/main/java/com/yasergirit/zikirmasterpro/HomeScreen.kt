@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.LocationManager
 import android.util.Log
+import androidx.annotation.DrawableRes
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -15,8 +16,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,7 +34,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,6 +45,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.yasergirit.zikirmasterpro.ui.theme.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -46,6 +54,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -60,6 +69,12 @@ internal data class PrayerTimeItem(
     val nameDe: String = "",
     val nameAr: String = "",
     val time: String
+)
+
+private data class DailyInspiration(
+    val category: String,
+    val text: String,
+    val source: String
 )
 
 // In-memory cache for prayer times + weather + mosques (survives recomposition & tab switches)
@@ -97,9 +112,6 @@ fun HomeTab(
         "en" -> en; "de" -> de.ifEmpty { en }; "ar" -> ar.ifEmpty { en }; else -> tr
     }
 
-    var showVerseStory by remember { mutableStateOf(false) }
-    var showHadithStory by remember { mutableStateOf(false) }
-    var showQuoteStory by remember { mutableStateOf(false) }
     // Use cached data if available, otherwise start loading
     val cacheValid = PrayerTimesCache.isValid()
     var prayerTimes by remember { mutableStateOf(PrayerTimesCache.prayerTimes) }
@@ -115,6 +127,8 @@ fun HomeTab(
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     ) }
+    var isNearbyMosquesLoading by remember { mutableStateOf(hasLocationPermission && PrayerTimesCache.nearbyMosques.isEmpty()) }
+    var nearbyMosquesLookupDone by remember { mutableStateOf(PrayerTimesCache.nearbyMosques.isNotEmpty()) }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -159,8 +173,12 @@ fun HomeTab(
             cityName = PrayerTimesCache.cityName
             weatherDays = PrayerTimesCache.weatherDays
             nearbyMosques = PrayerTimesCache.nearbyMosques
+            isNearbyMosquesLoading = false
+            nearbyMosquesLookupDone = true
             return@LaunchedEffect
         }
+        isNearbyMosquesLoading = true
+        nearbyMosquesLookupDone = false
         withContext(Dispatchers.IO) {
             try {
                 // Konum alınamazsa 2 saniye bekleyip tekrar dene
@@ -169,7 +187,12 @@ fun HomeTab(
                     delay(2000)
                     loc = getLocationForHome(context)
                 }
-                if (loc == null) return@withContext
+                if (loc == null) {
+                    isNearbyMosquesLoading = false
+                    nearbyMosquesLookupDone = true
+                    return@withContext
+                }
+                Log.d("HomeScreen", "Home lookup location: ${loc.first}, ${loc.second}")
                 // City name via Geocoder
                 try {
                     val geocoder = Geocoder(context, Locale.getDefault())
@@ -222,7 +245,12 @@ fun HomeTab(
                 // Cache'e kaydet
                 PrayerTimesCache.cityName = cityName
                 PrayerTimesCache.weatherDays = weatherDays
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.e("HomeScreen", "Home weather/mosque lookup failed", e)
+            } finally {
+                isNearbyMosquesLoading = false
+                nearbyMosquesLookupDone = true
+            }
         }
     }
 
@@ -237,35 +265,158 @@ fun HomeTab(
     val currentPrayer = findCurrentPrayer(prayerTimes, currentTimeMillis)
     val nextPrayer = findNextPrayer(prayerTimes, currentTimeMillis)
     val countdown = calculateCountdown(nextPrayer, currentTimeMillis)
+    val todayKey = remember(currentTimeMillis) {
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(currentTimeMillis))
+    }
+    val dailyInspiration = remember(selectedLanguage, todayKey) {
+        getDailyHomeInspiration(selectedLanguage, todayKey)
+    }
 
     val primary = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surface
     val onSurface = MaterialTheme.colorScheme.onSurface
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val currentWeatherCode = weatherDays.firstOrNull()?.weatherCode
+    val topWeatherBackground = remember(currentWeatherCode) {
+        weatherBackgroundForHomeCard(currentWeatherCode)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // ── Prayer Times Section ──
-        if (isLoading) {
-            Box(
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (cityName.isNotEmpty() || weatherDays.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Transparent
+                    )
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(topWeatherBackground)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = if (isDarkTheme) {
+                                            listOf(Color(0xD80A1616), Color(0x99112424), Color(0x66112424))
+                                        } else {
+                                            listOf(Color(0xDDF2FFF5), Color(0xB8F2FFF5), Color(0x66FFFFFF))
+                                        }
+                                    )
+                                )
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                if (cityName.isNotEmpty()) {
+                                    Text(
+                                        text = cityName,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = onSurface
+                                    )
+                                }
+                                Text(
+                                    text = t("Diyanet Takvimi", "Diyanet Calendar", "Diyanet-Kalender", "تقويم الديانة"),
+                                    fontSize = 12.sp,
+                                    color = onSurfaceVariant
+                                )
+                            }
+                            if (weatherDays.isNotEmpty()) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    weatherDays.forEach { day ->
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = weatherCodeToEmoji(day.weatherCode),
+                                                fontSize = 22.sp
+                                            )
+                                            Text(
+                                                text = day.dayName,
+                                                fontSize = 10.sp,
+                                                color = onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
-                contentAlignment = Alignment.Center
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                CircularProgressIndicator(color = primary)
+        // ── Prayer Times Section ──
+        if (isLoading) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Transparent
+                )
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.freepik_prayer_pattern_bg),
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                        alpha = if (isDarkTheme) 0.28f else 1f
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = if (isDarkTheme) {
+                                        listOf(Color(0xDD112018), Color(0xEF07120E))
+                                    } else {
+                                        listOf(Color(0xA8EFF8F0), Color(0xCDE5F3E8))
+                                    }
+                                )
+                            )
+                    )
+                    CircularProgressIndicator(color = primary)
+                }
             }
         } else if (!hasLocationPermission) {
             // No permission - show permission request
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
@@ -313,63 +464,41 @@ fun HomeTab(
         } else if (prayerTimes.isNotEmpty()) {
             // ── Prayer Times Card ──
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
+                    containerColor = Color.Transparent
                 )
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // ── Header: Şehir + Metod | Hava Durumu ──
-                    if (cityName.isNotEmpty() || weatherDays.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            // Sol: Şehir + Hesaplama metodu
-                            Column {
-                                if (cityName.isNotEmpty()) {
-                                    Text(
-                                        text = cityName,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = onSurface
-                                    )
-                                }
-                                Text(
-                                    text = t("Diyanet Takvimi", "Diyanet Calendar", "Diyanet-Kalender", "تقويم الديانة"),
-                                    fontSize = 12.sp,
-                                    color = onSurfaceVariant
-                                )
-                            }
-                            // Sağ: 3 günlük hava durumu
-                            if (weatherDays.isNotEmpty()) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    weatherDays.forEach { day ->
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text(
-                                                text = weatherCodeToEmoji(day.weatherCode),
-                                                fontSize = 22.sp
-                                            )
-                                            Text(
-                                                text = day.dayName,
-                                                fontSize = 10.sp,
-                                                color = onSurfaceVariant
-                                            )
-                                        }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(id = R.drawable.freepik_prayer_pattern_bg),
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                        alpha = if (isDarkTheme) 0.28f else 1f
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = if (isDarkTheme) {
+                                        listOf(Color(0xDD112018), Color(0xEF07120E))
+                                    } else {
+                                        listOf(Color(0xA8EFF8F0), Color(0xCDE5F3E8))
                                     }
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
+                                )
+                            )
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                     // Current/Next Prayer Name
                     val displayPrayerName = if (currentPrayer != null) {
                         when (selectedLanguage) { "en" -> currentPrayer.nameEn; "de" -> currentPrayer.nameDe.ifEmpty { currentPrayer.nameEn }; "ar" -> currentPrayer.nameAr.ifEmpty { currentPrayer.nameEn }; else -> currentPrayer.nameTr }
@@ -483,10 +612,13 @@ fun HomeTab(
                     }
                 }
             }
+            }
         } else {
             // Permission granted but API failed - show error with retry
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isDarkTheme) Color(0xFF1A2A1A) else Color(0xFFE8F5E9)
@@ -541,8 +673,74 @@ fun HomeTab(
             }
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Transparent
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.freepik_islamic_pattern_bg),
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.Crop,
+                    alpha = if (isDarkTheme) 0.36f else 1f
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = if (isDarkTheme) {
+                                    listOf(Color(0xB8122118), Color(0xD80A1510))
+                                } else {
+                                    listOf(Color(0x55FFF4D6), Color(0x66E7F2E8))
+                                }
+                            )
+                        )
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                Text(
+                    text = dailyInspiration.category,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isDarkTheme) Color(0xFFE8C66A) else Color(0xFF8A6A00),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = dailyInspiration.text,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isDarkTheme) Color(0xFFF8F1DC) else Color(0xFF243527),
+                    lineHeight = 23.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = dailyInspiration.source,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isDarkTheme) Color(0xFFCDBD8E) else Color(0xFF6F5A18),
+                    textAlign = TextAlign.Center
+                )
+                }
+            }
+        }
+
         // ── Yakındaki Camiler ──
-        if (nearbyMosques.isNotEmpty()) {
+        if (hasLocationPermission && (isNearbyMosquesLoading || nearbyMosquesLookupDone || nearbyMosques.isNotEmpty())) {
             Spacer(modifier = Modifier.height(12.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -559,31 +757,63 @@ fun HomeTab(
                         color = primary
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    nearbyMosques.forEach { mosque ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { selectedMosque = mosque }
-                                .padding(vertical = 6.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("🕌", fontSize = 22.sp)
-                            Spacer(modifier = Modifier.width(12.dp))
+                    when {
+                        isNearbyMosquesLoading -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    strokeWidth = 3.dp,
+                                    color = primary
+                                )
+                            }
+                        }
+                        nearbyMosques.isNotEmpty() -> {
+                            nearbyMosques.forEach { mosque ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { selectedMosque = mosque }
+                                        .padding(vertical = 6.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("🕌", fontSize = 22.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = mosque.name,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = onSurface,
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = formatDistance(mosque.distance),
+                                        fontSize = 13.sp,
+                                        color = onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        else -> {
                             Text(
-                                text = mosque.name,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = onSurface,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = formatDistance(mosque.distance),
+                                text = t(
+                                    "Yakındaki camiler şu an yüklenemedi. Konum ve internet bağlantısını kontrol edin.",
+                                    "Nearby mosques could not be loaded right now. Check location and internet connection.",
+                                    "Moscheen in der Nähe konnten gerade nicht geladen werden. Prüfen Sie Standort und Internetverbindung.",
+                                    "تعذر تحميل المساجد القريبة الآن. تحقق من الموقع والاتصال بالإنترنت."
+                                ),
                                 fontSize = 13.sp,
-                                color = onSurfaceVariant
+                                color = onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -591,54 +821,8 @@ fun HomeTab(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── Categories (always visible) ──
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            CategoryCircle(
-                emoji = "📖",
-                label = t("Ayet", "Verse", "Vers", "آية"),
-                bgColor = if (isDarkTheme) Color(0xFF1B3A2A) else Color(0xFFE0F2E9),
-                onClick = { showVerseStory = true }
-            )
-            CategoryCircle(
-                emoji = "☪️",
-                label = t("Hadis", "Hadith", "Hadith", "حديث"),
-                bgColor = if (isDarkTheme) Color(0xFF2A1B3A) else Color(0xFFEDE0F2),
-                onClick = { showHadithStory = true }
-            )
-            CategoryCircle(
-                emoji = "✨",
-                label = t("Özlü Sözler", "Wise Quotes", "Weisheiten", "حكم"),
-                bgColor = if (isDarkTheme) Color(0xFF3A2A1B) else Color(0xFFF2EDE0),
-                onClick = { showQuoteStory = true }
-            )
+            }
         }
-
-    }
-
-    // Story Overlays (full screen on top)
-    if (showVerseStory) {
-        VerseStoryOverlay(
-            selectedLanguage = selectedLanguage,
-            onDismiss = { showVerseStory = false }
-        )
-    }
-    if (showHadithStory) {
-        HadithStoryOverlay(
-            selectedLanguage = selectedLanguage,
-            onDismiss = { showHadithStory = false }
-        )
-    }
-    if (showQuoteStory) {
-        QuoteStoryOverlay(
-            selectedLanguage = selectedLanguage,
-            onDismiss = { showQuoteStory = false }
-        )
-    }
     // ── Cami Bottom Sheet ──
     if (selectedMosque != null) {
         val mosque = selectedMosque!!
@@ -729,39 +913,6 @@ fun HomeTab(
     } // Box
 }
 
-@Composable
-private fun CategoryCircle(
-    emoji: String,
-    label: String,
-    bgColor: Color,
-    onClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(bgColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = emoji,
-                fontSize = 32.sp
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
 // ── Data classes ──
 
 private data class CountdownTime(
@@ -769,6 +920,149 @@ private data class CountdownTime(
     val minutes: String,
     val seconds: String
 )
+
+private fun getDailyHomeInspiration(language: String, dateKey: String): DailyInspiration {
+    data class MultiText(
+        val tr: String,
+        val en: String,
+        val de: String,
+        val ar: String,
+        val sourceTr: String,
+        val sourceEn: String,
+        val sourceDe: String = sourceEn,
+        val sourceAr: String
+    )
+
+    fun MultiText.text() = when (language) {
+        "en" -> en
+        "de" -> de.ifEmpty { en }
+        "ar" -> ar.ifEmpty { en }
+        else -> tr
+    }
+
+    fun MultiText.source() = when (language) {
+        "en" -> sourceEn
+        "de" -> sourceDe.ifEmpty { sourceEn }
+        "ar" -> sourceAr.ifEmpty { sourceEn }
+        else -> sourceTr
+    }
+
+    fun category(tr: String, en: String, de: String, ar: String) = when (language) {
+        "en" -> en
+        "de" -> de
+        "ar" -> ar
+        else -> tr
+    }
+
+    val verses = listOf(
+        MultiText(
+            "Şüphesiz zorlukla beraber bir kolaylık vardır.",
+            "Surely with hardship comes ease.",
+            "Gewiss, mit der Erschwernis kommt Erleichterung.",
+            "فَإِنَّ مَعَ الْعُسْرِ يُسْرًا",
+            "İnşirah Suresi 94:5",
+            "Surah Ash-Sharh 94:5",
+            "Sure Asch-Scharh 94:5",
+            "سورة الشرح ٩٤:٥"
+        ),
+        MultiText(
+            "Kalpler ancak Allah'ı anmakla huzur bulur.",
+            "Hearts find peace only in the remembrance of Allah.",
+            "Die Herzen finden nur im Gedenken Allahs Ruhe.",
+            "أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ",
+            "Ra'd Suresi 13:28",
+            "Surah Ar-Ra'd 13:28",
+            "Sure Ar-Ra'd 13:28",
+            "سورة الرعد ١٣:٢٨"
+        ),
+        MultiText(
+            "Allah hiç kimseye gücünün yeteceğinden başkasını yüklemez.",
+            "Allah does not burden any soul beyond what it can bear.",
+            "Allah erlegt keiner Seele mehr auf, als sie zu leisten vermag.",
+            "لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا",
+            "Bakara Suresi 2:286",
+            "Surah Al-Baqarah 2:286",
+            "Sure Al-Baqara 2:286",
+            "سورة البقرة ٢:٢٨٦"
+        )
+    )
+
+    val hadiths = listOf(
+        MultiText(
+            "Ameller niyetlere göredir.",
+            "Actions are judged by intentions.",
+            "Die Taten werden nach den Absichten beurteilt.",
+            "إنما الأعمال بالنيات",
+            "Sahih-i Buhari",
+            "Sahih al-Bukhari",
+            "Sahih al-Bukhari",
+            "صحيح البخاري"
+        ),
+        MultiText(
+            "Kolaylaştırınız, zorlaştırmayınız. Müjdeleyiniz, nefret ettirmeyiniz.",
+            "Make things easy and do not make them difficult. Give glad tidings and do not repel people.",
+            "Macht es leicht und nicht schwer. Überbringt frohe Botschaft und schreckt nicht ab.",
+            "يسروا ولا تعسروا وبشروا ولا تنفروا",
+            "Sahih-i Buhari",
+            "Sahih al-Bukhari",
+            "Sahih al-Bukhari",
+            "صحيح البخاري"
+        ),
+        MultiText(
+            "Güzel söz sadakadır.",
+            "A good word is charity.",
+            "Ein gutes Wort ist eine Wohltat.",
+            "الكلمة الطيبة صدقة",
+            "Sahih-i Buhari",
+            "Sahih al-Bukhari",
+            "Sahih al-Bukhari",
+            "صحيح البخاري"
+        )
+    )
+
+    val quotes = listOf(
+        MultiText(
+            "Sevelim sevilelim, dünya kimseye kalmaz.",
+            "Let us love and be loved, for this world remains for no one.",
+            "Lasst uns lieben und geliebt werden, denn diese Welt bleibt niemandem.",
+            "لنُحبّ ونُحَبّ، فالدنيا لا تبقى لأحد",
+            "Yunus Emre",
+            "Yunus Emre",
+            "Yunus Emre",
+            "يونس إمره"
+        ),
+        MultiText(
+            "Bir mum diğer mumu tutuşturmakla ışığından bir şey kaybetmez.",
+            "A candle loses nothing by lighting another candle.",
+            "Eine Kerze verliert nichts, wenn sie eine andere Kerze anzündet.",
+            "لا تخسر الشمعة شيئاً من نورها إذا أضاءت شمعة أخرى",
+            "Hz. Mevlana",
+            "Rumi",
+            "Rumi",
+            "مولانا الرومي"
+        ),
+        MultiText(
+            "Toprak ol ki gül bitiresin.",
+            "Be like earth so that you may grow roses.",
+            "Sei wie Erde, damit du Rosen wachsen lässt.",
+            "كن كالتراب لتنبت الورود",
+            "Hz. Mevlana",
+            "Rumi",
+            "Rumi",
+            "مولانا الرومي"
+        )
+    )
+
+    val seed = "$dateKey-$language".hashCode()
+    val type = Math.floorMod(seed, 3)
+    val (label, items) = when (type) {
+        0 -> category("Günün Ayeti", "Verse of the Day", "Vers des Tages", "آية اليوم") to verses
+        1 -> category("Günün Hadisi", "Hadith of the Day", "Hadith des Tages", "حديث اليوم") to hadiths
+        else -> category("Günün Sözü", "Quote of the Day", "Wort des Tages", "حكمة اليوم") to quotes
+    }
+    val item = items[Math.floorMod(seed / 3, items.size)]
+    return DailyInspiration(label, item.text(), item.source())
+}
 
 // ── Helper functions ──
 
@@ -959,17 +1253,52 @@ internal data class WeatherDay(
     val weatherCode: Int
 )
 
+@DrawableRes
+private fun weatherBackgroundForHomeCard(code: Int?): Int = when (code) {
+    0, 1 -> R.drawable.weather_sunny_bg
+    2, 3, 45, 48 -> R.drawable.weather_cloudy_bg
+    in 51..67, in 80..82, in 95..99 -> R.drawable.weather_rainy_bg
+    in 71..77, in 85..86 -> R.drawable.weather_cloudy_bg
+    else -> R.drawable.weather_cloudy_bg
+}
+
 @SuppressLint("MissingPermission")
 private suspend fun getLocationForHome(context: Context): Pair<Double, Double>? {
     if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
         ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
     ) return null
     val fusedClient = LocationServices.getFusedLocationProviderClient(context)
-    val loc = suspendCoroutine<android.location.Location?> { cont ->
-        fusedClient.lastLocation
-            .addOnSuccessListener { cont.resume(it) }
-            .addOnFailureListener { cont.resume(null) }
-    } ?: return null
+    val cachedLocation = try {
+        suspendCoroutine<android.location.Location?> { cont ->
+            fusedClient.lastLocation
+                .addOnSuccessListener { cont.resume(it) }
+                .addOnFailureListener { cont.resume(null) }
+        }
+    } catch (_: Exception) { null }
+
+    val fallbackLocation = cachedLocation ?: try {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            ?: locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+    } catch (_: Exception) { null }
+
+    val loc = fallbackLocation ?: try {
+        withTimeoutOrNull(8000) {
+            suspendCoroutine<android.location.Location?> { cont ->
+                fusedClient.getCurrentLocation(
+                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                    CancellationTokenSource().token
+                ).addOnSuccessListener { cont.resume(it) }
+                .addOnFailureListener { cont.resume(null) }
+            }
+        }
+    } catch (_: Exception) { null }
+
+    if (loc == null) {
+        Log.w("HomeScreen", "Location is unavailable for home weather/mosque lookup")
+        return null
+    }
+
     return Pair(loc.latitude, loc.longitude)
 }
 
@@ -987,59 +1316,102 @@ internal data class NearbyMosque(
  * Ücretsiz, API key gerektirmez.
  */
 private fun fetchNearbyMosques(lat: Double, lng: Double): List<NearbyMosque> {
-    return try {
-        val query = """
+    val queries = listOf(
+        """
             [out:json][timeout:10];
             (
-              node["amenity"="place_of_worship"]["religion"="muslim"](around:2000,$lat,$lng);
-              way["amenity"="place_of_worship"]["religion"="muslim"](around:2000,$lat,$lng);
+              node["amenity"="place_of_worship"]["religion"="muslim"](around:5000,$lat,$lng);
+              way["amenity"="place_of_worship"]["religion"="muslim"](around:5000,$lat,$lng);
+              relation["amenity"="place_of_worship"]["religion"="muslim"](around:5000,$lat,$lng);
+              node["building"="mosque"](around:5000,$lat,$lng);
+              way["building"="mosque"](around:5000,$lat,$lng);
+              relation["building"="mosque"](around:5000,$lat,$lng);
+            );
+            out center tags;
+        """.trimIndent(),
+        """
+            [out:json][timeout:10];
+            (
+              node["name"~"cami|camii|mosque",i](around:5000,$lat,$lng);
+              way["name"~"cami|camii|mosque",i](around:5000,$lat,$lng);
+              relation["name"~"cami|camii|mosque",i](around:5000,$lat,$lng);
             );
             out center tags;
         """.trimIndent()
+    )
 
-        val client = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build()
+    val endpoints = listOf(
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.openstreetmap.ru/api/interpreter"
+    )
 
-        val requestBody = okhttp3.FormBody.Builder()
-            .add("data", query)
-            .build()
+    val client = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .build()
 
-        val request = Request.Builder()
-            .url("https://overpass-api.de/api/interpreter")
-            .post(requestBody)
-            .build()
+    for (query in queries) {
+        for (endpoint in endpoints) {
+            try {
+                val requestBody = okhttp3.FormBody.Builder()
+                    .add("data", query)
+                    .build()
 
-        val response = client.newCall(request).execute()
-        val body = response.body?.string()
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .post(requestBody)
+                    .build()
 
-        if (response.isSuccessful && body != null) {
-            val elements = JSONObject(body).getJSONArray("elements")
-            val mosques = mutableListOf<NearbyMosque>()
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
 
-            for (i in 0 until elements.length()) {
-                val el = elements.getJSONObject(i)
-                val tags = el.optJSONObject("tags") ?: continue
-                val name = tags.optString("name", "")
-                    .ifEmpty { tags.optString("name:tr", "") }
-                    .ifEmpty { tags.optString("name:en", "") }
-                if (name.isEmpty()) continue
-                // Koordinatlar: node -> lat/lon, way -> center.lat/center.lon
-                val center = el.optJSONObject("center")
-                val mLat = if (el.has("lat")) el.getDouble("lat") else center?.optDouble("lat") ?: continue
-                val mLng = if (el.has("lon")) el.getDouble("lon") else center?.optDouble("lon") ?: continue
-                val dist = haversineDistance(lat, lng, mLat, mLng)
-                mosques.add(NearbyMosque(name, dist, mLat, mLng))
+                if (response.isSuccessful && body != null) {
+                    val elements = JSONObject(body).getJSONArray("elements")
+                    val mosques = mutableListOf<NearbyMosque>()
+
+                    for (i in 0 until elements.length()) {
+                        val el = elements.getJSONObject(i)
+                        val tags = el.optJSONObject("tags")
+                        val name = (tags?.optString("name", "") ?: "")
+                            .ifEmpty { tags?.optString("name:tr", "") ?: "" }
+                            .ifEmpty { tags?.optString("name:en", "") ?: "" }
+                        // Koordinatlar: node -> lat/lon, way/relation -> center.lat/center.lon
+                        val center = el.optJSONObject("center")
+                        val mLat = if (el.has("lat")) el.getDouble("lat") else center?.optDouble("lat") ?: continue
+                        val mLng = if (el.has("lon")) el.getDouble("lon") else center?.optDouble("lon") ?: continue
+                        val dist = haversineDistance(lat, lng, mLat, mLng)
+                        mosques.add(
+                            NearbyMosque(
+                                name = name.ifEmpty { "Cami" },
+                                distance = dist,
+                                lat = mLat,
+                                lng = mLng
+                            )
+                        )
+                    }
+
+                    val result = mosques
+                        .distinctBy {
+                            "${it.name.lowercase(Locale.getDefault())}-${"%.5f".format(Locale.US, it.lat)}-${"%.5f".format(Locale.US, it.lng)}"
+                        }
+                        .sortedBy { it.distance }
+                        .take(3)
+                    if (result.isNotEmpty()) {
+                        Log.d("HomeScreen", "Mosque fetch found ${result.size} items from $endpoint")
+                        return result
+                    }
+                    Log.w("HomeScreen", "Mosque fetch returned no named/located items from $endpoint")
+                } else {
+                    Log.w("HomeScreen", "Mosque fetch failed from $endpoint: ${response.code}")
+                }
+            } catch (e: Exception) {
+                Log.e("HomeScreen", "Mosque fetch error from $endpoint", e)
             }
-
-            mosques.sortBy { it.distance }
-            mosques.take(3)
-        } else emptyList()
-    } catch (e: Exception) {
-        Log.e("HomeScreen", "Mosque fetch error", e)
-        emptyList()
+        }
     }
+
+    return emptyList()
 }
 
 /** Haversine formülü ile iki koordinat arası mesafe (metre). */

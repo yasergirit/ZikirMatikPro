@@ -36,6 +36,43 @@ class PrayerTimesWorker(
 
     companion object {
         private const val TAG = "PrayerTimesWorker"
+        private const val REQUEST_ID_RESCHEDULE = 2099
+
+        fun cancelAllAlarms(context: Context) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val notifIds = listOf(
+                PrayerAlarmReceiver.NOTIF_ID_FAJR,
+                PrayerAlarmReceiver.NOTIF_ID_SUNRISE,
+                PrayerAlarmReceiver.NOTIF_ID_DHUHR,
+                PrayerAlarmReceiver.NOTIF_ID_ASR,
+                PrayerAlarmReceiver.NOTIF_ID_MAGHRIB,
+                PrayerAlarmReceiver.NOTIF_ID_ISHA,
+                PrayerAlarmReceiver.NOTIF_ID_BEFORE_FAJR,
+                PrayerAlarmReceiver.NOTIF_ID_BEFORE_SUNRISE,
+                PrayerAlarmReceiver.NOTIF_ID_BEFORE_DHUHR,
+                PrayerAlarmReceiver.NOTIF_ID_BEFORE_ASR,
+                PrayerAlarmReceiver.NOTIF_ID_BEFORE_MAGHRIB,
+                PrayerAlarmReceiver.NOTIF_ID_BEFORE_ISHA,
+            )
+
+            for (id in notifIds) {
+                val intent = Intent(context, PrayerAlarmReceiver::class.java)
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context, id, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                alarmManager.cancel(pendingIntent)
+            }
+
+            val rescheduleIntent = Intent(context, PrayerAlarmReceiver::class.java).apply {
+                action = PrayerAlarmReceiver.ACTION_RESCHEDULE_PRAYERS
+            }
+            val reschedulePendingIntent = PendingIntent.getBroadcast(
+                context, REQUEST_ID_RESCHEDULE, rescheduleIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(reschedulePendingIntent)
+        }
     }
 
     override suspend fun doWork(): Result {
@@ -45,9 +82,11 @@ class PrayerTimesWorker(
                 val enabled = getPref("prayer_notif_enabled", true)
                 if (!enabled) {
                     Log.d(TAG, "Prayer notifications disabled")
-                    cancelAllAlarms()
+                    cancelAllAlarms(context)
                     return@withContext Result.success()
                 }
+
+                scheduleDailyRescheduleAlarm()
 
                 // Konum al
                 val location = getLastKnownLocation()
@@ -78,6 +117,7 @@ class PrayerTimesWorker(
 
                 // Alarmları kur
                 scheduleAlarms(prayerTimes)
+                scheduleDailyRescheduleAlarm()
 
                 Result.success()
             } catch (e: Exception) {
@@ -348,29 +388,47 @@ class PrayerTimesWorker(
         }
     }
 
-    private fun cancelAllAlarms() {
+    private fun scheduleDailyRescheduleAlarm() {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val notifIds = listOf(
-            PrayerAlarmReceiver.NOTIF_ID_FAJR,
-            PrayerAlarmReceiver.NOTIF_ID_SUNRISE,
-            PrayerAlarmReceiver.NOTIF_ID_DHUHR,
-            PrayerAlarmReceiver.NOTIF_ID_ASR,
-            PrayerAlarmReceiver.NOTIF_ID_MAGHRIB,
-            PrayerAlarmReceiver.NOTIF_ID_ISHA,
-            PrayerAlarmReceiver.NOTIF_ID_BEFORE_FAJR,
-            PrayerAlarmReceiver.NOTIF_ID_BEFORE_SUNRISE,
-            PrayerAlarmReceiver.NOTIF_ID_BEFORE_DHUHR,
-            PrayerAlarmReceiver.NOTIF_ID_BEFORE_ASR,
-            PrayerAlarmReceiver.NOTIF_ID_BEFORE_MAGHRIB,
-            PrayerAlarmReceiver.NOTIF_ID_BEFORE_ISHA,
+        val triggerAtMillis = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 5)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        val intent = Intent(context, PrayerAlarmReceiver::class.java).apply {
+            action = PrayerAlarmReceiver.ACTION_RESCHEDULE_PRAYERS
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            REQUEST_ID_RESCHEDULE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        for (id in notifIds) {
-            val intent = Intent(context, PrayerAlarmReceiver::class.java)
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, id, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
+                    )
+                } else {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
+                    )
+                }
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
+                )
+            }
+            Log.d(TAG, "Daily prayer reschedule alarm set")
+        } catch (e: SecurityException) {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent
             )
-            alarmManager.cancel(pendingIntent)
         }
     }
 }

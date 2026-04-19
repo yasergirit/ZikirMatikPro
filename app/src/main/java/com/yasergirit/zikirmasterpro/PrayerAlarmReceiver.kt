@@ -26,11 +26,12 @@ import java.util.concurrent.TimeUnit
 class PrayerAlarmReceiver : BroadcastReceiver() {
 
     companion object {
-        const val CHANNEL_ID = "prayer_times_channel"
+        const val CHANNEL_ID = "prayer_times_ezan_channel_v2"
         const val EXTRA_PRAYER_NAME = "prayer_name"
         const val EXTRA_PRAYER_TIME = "prayer_time"
         const val EXTRA_NOTIFICATION_ID = "notification_id"
         const val EXTRA_IS_BEFORE = "is_before"
+        const val ACTION_RESCHEDULE_PRAYERS = "com.yasergirit.zikirmasterpro.RESCHEDULE_PRAYERS"
 
         const val NOTIF_ID_FAJR = 2001
         const val NOTIF_ID_SUNRISE = 2002
@@ -51,10 +52,20 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_RESCHEDULE_PRAYERS) {
+            if (isPrayerNotificationsEnabled(context)) {
+                BootReceiver.schedulePrayerTimesWorker(context.applicationContext)
+                BootReceiver.runOnce(context.applicationContext)
+            }
+            return
+        }
+
         val prayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: return
         val prayerTime = intent.getStringExtra(EXTRA_PRAYER_TIME) ?: ""
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 2000)
         val isBefore = intent.getBooleanExtra(EXTRA_IS_BEFORE, false)
+
+        if (!isPrayerNotificationsEnabled(context)) return
 
         createNotificationChannel(context)
 
@@ -75,15 +86,21 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             return
         }
 
+        if (!isOnTimePrayerEnabled(context, notificationId)) return
+        playEzan(context)
+        showNotification(context, prayerName, prayerTime, notificationId, null, shouldAlert = true)
+        BootReceiver.runOnce(context.applicationContext)
+
         // Vaktinde bildirimi: arka planda ayet çek
         val pendingResult = goAsync()
         Thread {
             try {
                 val quote = fetchRandomVerse()
-                showNotification(context, prayerName, prayerTime, notificationId, quote)
+                if (quote != null) {
+                    showNotification(context, prayerName, prayerTime, notificationId, quote, shouldAlert = false)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Notification error", e)
-                showNotification(context, prayerName, prayerTime, notificationId, null)
             } finally {
                 pendingResult.finish()
             }
@@ -182,8 +199,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                 .build()
-            val channel = NotificationChannel(CHANNEL_ID, "Namaz Vakitleri", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Namaz vakti bildirimleri"
+            val channel = NotificationChannel(CHANNEL_ID, "Ezan Sesi Bildirimleri", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Ezan vakti sesli bildirimleri"
                 enableVibration(true)
                 setSound(ezanUri, audioAttributes)
             }
@@ -194,17 +211,41 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
     private fun playEzan(context: Context) {
         try {
-            val isEzanEnabled = try {
-                val key = androidx.datastore.preferences.core.booleanPreferencesKey("ezan_sound_enabled")
-                kotlinx.coroutines.runBlocking {
-                    context.dataStore.data.first()[key] ?: true
-                }
-            } catch (_: Exception) { true }
-
-            if (!isEzanEnabled) return
             EzanService.start(context)
         } catch (e: Exception) {
             Log.e(TAG, "Ezan service start error", e)
+        }
+    }
+
+    private fun isPrayerNotificationsEnabled(context: Context): Boolean {
+        return try {
+            val key = androidx.datastore.preferences.core.booleanPreferencesKey("prayer_notif_enabled")
+            kotlinx.coroutines.runBlocking {
+                context.dataStore.data.first()[key] ?: true
+            }
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    private fun isOnTimePrayerEnabled(context: Context, notificationId: Int): Boolean {
+        val prefName = when (notificationId) {
+            NOTIF_ID_FAJR -> "prayer_notif_fajr"
+            NOTIF_ID_SUNRISE -> "prayer_notif_sunrise"
+            NOTIF_ID_DHUHR -> "prayer_notif_dhuhr"
+            NOTIF_ID_ASR -> "prayer_notif_asr"
+            NOTIF_ID_MAGHRIB -> "prayer_notif_maghrib"
+            NOTIF_ID_ISHA -> "prayer_notif_isha"
+            else -> return true
+        }
+
+        return try {
+            val key = androidx.datastore.preferences.core.booleanPreferencesKey(prefName)
+            kotlinx.coroutines.runBlocking {
+                context.dataStore.data.first()[key] ?: true
+            }
+        } catch (_: Exception) {
+            true
         }
     }
 
@@ -267,7 +308,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
 
     private fun showNotification(
         context: Context, prayerName: String, prayerTime: String,
-        notificationId: Int, quote: Pair<String, String>?
+        notificationId: Int, quote: Pair<String, String>?,
+        shouldAlert: Boolean
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ActivityCompat.checkSelfPermission(
@@ -275,8 +317,6 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
                 ) != PackageManager.PERMISSION_GRANTED
             ) return
         }
-
-        playEzan(context)
 
         val title = if (prayerTime.isNotEmpty()) "$prayerTime $prayerName Vakti" else "$prayerName Vakti"
         val largeIcon = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher_foreground)
@@ -293,8 +333,14 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             .setContentText(contentText)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setSound(ezanUri)
+            .setOnlyAlertOnce(!shouldAlert)
             .setVibrate(longArrayOf(0, 500, 200, 500))
+
+        if (shouldAlert) {
+            builder.setSound(ezanUri)
+        } else {
+            builder.setSilent(true)
+        }
 
         if (quote != null) {
             builder.setStyle(
