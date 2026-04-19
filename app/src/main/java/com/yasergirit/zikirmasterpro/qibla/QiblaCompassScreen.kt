@@ -177,7 +177,8 @@ fun QiblaCompassScreen(
         val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
-        sensorAvailable = rotationVector != null || (accelerometer != null && magnetometer != null)
+        val hasMagneticCompass = accelerometer != null && magnetometer != null
+        sensorAvailable = hasMagneticCompass || rotationVector != null
 
         val gravity = FloatArray(3)
         val geomagnetic = FloatArray(3)
@@ -217,19 +218,21 @@ fun QiblaCompassScreen(
             override fun onSensorChanged(event: SensorEvent) {
                 when (event.sensor.type) {
                     Sensor.TYPE_ROTATION_VECTOR -> {
-                        val matrix = FloatArray(9)
-                        SensorManager.getRotationMatrixFromVector(matrix, event.values)
-                        publishHeading(headingFromRotationMatrix(matrix))
+                        if (!hasMagneticCompass) {
+                            val matrix = FloatArray(9)
+                            SensorManager.getRotationMatrixFromVector(matrix, event.values)
+                            publishHeading(headingFromRotationMatrix(matrix))
+                        }
                     }
 
                     Sensor.TYPE_ACCELEROMETER -> {
-                        lowPass(event.values, gravity)
+                        lowPass(event.values, gravity, hasGravity)
                         hasGravity = true
                         updateFallbackHeading()
                     }
 
                     Sensor.TYPE_MAGNETIC_FIELD -> {
-                        lowPass(event.values, geomagnetic)
+                        lowPass(event.values, geomagnetic, hasGeomagnetic)
                         hasGeomagnetic = true
                         updateFallbackHeading()
                     }
@@ -243,15 +246,11 @@ fun QiblaCompassScreen(
             }
         }
 
-        if (rotationVector != null) {
+        if (hasMagneticCompass) {
+            sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(listener, magnetometer, SensorManager.SENSOR_DELAY_GAME)
+        } else if (rotationVector != null) {
             sensorManager.registerListener(listener, rotationVector, SensorManager.SENSOR_DELAY_GAME)
-        } else {
-            if (accelerometer != null) {
-                sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
-            }
-            if (magnetometer != null) {
-                sensorManager.registerListener(listener, magnetometer, SensorManager.SENSOR_DELAY_GAME)
-            }
         }
 
         onDispose {
@@ -259,17 +258,20 @@ fun QiblaCompassScreen(
         }
     }
 
-    val trueHeading = magneticHeading?.let { toTrueNorth(it, location) }
+    val compassHeading = magneticHeading
     val qiblaBearing = location?.let { QiblaCalculator.calculateQiblaBearing(it.latitude, it.longitude) }
-    val qiblaArrowAngle = if (qiblaBearing != null && trueHeading != null) {
-        QiblaCalculator.relativeQiblaAngle(qiblaBearing, trueHeading)
+    val qiblaCompassBearing = qiblaBearing?.let {
+        QiblaCalculator.normalizeDegrees(it - magneticDeclination(location))
+    }
+    val qiblaArrowAngle = if (qiblaCompassBearing != null && compassHeading != null) {
+        QiblaCalculator.relativeQiblaAngle(qiblaCompassBearing, compassHeading)
     } else {
         0f
     }
     val turnAmount = if (qiblaArrowAngle > 180f) 360f - qiblaArrowAngle else qiblaArrowAngle
     val turnRight = qiblaArrowAngle <= 180f
-    val isFacingQibla = qiblaBearing != null && trueHeading != null && turnAmount <= FACING_QIBLA_TOLERANCE
-    val isReady = sensorAvailable && permissionGranted && locationEnabled && qiblaBearing != null && trueHeading != null
+    val isFacingQibla = qiblaCompassBearing != null && compassHeading != null && turnAmount <= FACING_QIBLA_TOLERANCE
+    val isReady = sensorAvailable && permissionGranted && locationEnabled && qiblaCompassBearing != null && compassHeading != null
     val accuracyText = when (sensorAccuracy) {
         SensorManager.SENSOR_STATUS_UNRELIABLE -> t("Kalibre edin", "Calibrate", "Kalibrieren", "عاير")
         SensorManager.SENSOR_STATUS_ACCURACY_LOW -> t("Düşük", "Low", "Niedrig", "منخفض")
@@ -374,7 +376,7 @@ fun QiblaCompassScreen(
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(324.dp)) {
                     Canvas(modifier = Modifier.size(314.dp)) {
                         drawKaabaCompass(
-                            compassRotation = QiblaCalculator.normalizeDegrees(-(trueHeading ?: 0f)),
+                            compassRotation = QiblaCalculator.normalizeDegrees(-(compassHeading ?: 0f)),
                             qiblaArrowAngle = qiblaArrowAngle,
                             isFacingQibla = isFacingQibla,
                             primary = primary,
@@ -435,8 +437,8 @@ fun QiblaCompassScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            CompassMetric(t("Kıble", "Qibla", "Qibla", "القبلة"), "${qiblaBearing?.roundToInt() ?: 0}°", onSurface, onSurfaceVariant)
-                            CompassMetric(t("Yön", "Heading", "Richtung", "الاتجاه"), "${trueHeading?.roundToInt() ?: 0}°", onSurface, onSurfaceVariant)
+                            CompassMetric(t("Kıble", "Qibla", "Qibla", "القبلة"), "${qiblaCompassBearing?.roundToInt() ?: 0}°", onSurface, onSurfaceVariant)
+                            CompassMetric(t("Yön", "Heading", "Richtung", "الاتجاه"), "${compassHeading?.roundToInt() ?: 0}°", onSurface, onSurfaceVariant)
                             CompassMetric(t("Sensör", "Sensor", "Sensor", "المستشعر"), accuracyText, onSurface, onSurfaceVariant)
                         }
                     }
@@ -633,10 +635,14 @@ private fun Color.toArgb(): Int = android.graphics.Color.argb(
     (blue * 255).roundToInt()
 )
 
-private fun lowPass(input: FloatArray, output: FloatArray) {
-    val alpha = 0.86f
+private fun lowPass(input: FloatArray, output: FloatArray, initialized: Boolean) {
+    val alpha = 0.97f
     for (index in input.indices) {
-        output[index] = output[index] * alpha + input[index] * (1f - alpha)
+        output[index] = if (initialized) {
+            output[index] * alpha + input[index] * (1f - alpha)
+        } else {
+            input[index]
+        }
     }
 }
 
@@ -647,8 +653,8 @@ private fun shortestAngleDifference(from: Float, to: Float): Float {
     return diff
 }
 
-private fun toTrueNorth(magneticHeading: Float, location: Location?): Float {
-    if (location == null) return QiblaCalculator.normalizeDegrees(magneticHeading)
+private fun magneticDeclination(location: Location?): Float {
+    if (location == null) return 0f
 
     val field = GeomagneticField(
         location.latitude.toFloat(),
@@ -656,7 +662,7 @@ private fun toTrueNorth(magneticHeading: Float, location: Location?): Float {
         location.altitude.toFloat(),
         System.currentTimeMillis()
     )
-    return QiblaCalculator.normalizeDegrees(magneticHeading + field.declination)
+    return field.declination
 }
 
 private fun hasLocationPermission(context: Context): Boolean {
