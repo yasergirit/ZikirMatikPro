@@ -612,8 +612,8 @@ private fun CounterScreen(activity: android.app.Activity) {
                             colors = navColors
                         )
                         NavigationBarItem(
-                            selected = false,
-                            onClick = { showMorePanel = true },
+                            selected = currentTab == 3,
+                            onClick = { currentTab = 3 },
                             icon = { Icon(Icons.Default.Apps, contentDescription = null) },
                             label = { Text(t("Daha Fazla", "More", "Mehr", "\u0627\u0644\u0645\u0632\u064A\u062F"), fontSize = 11.sp) },
                             colors = navColors
@@ -654,22 +654,18 @@ private fun CounterScreen(activity: android.app.Activity) {
                             onDeleteCounter = { item -> savedCounters = savedCounters.filter { it != item } },
                             onDeleteAllCounters = { showDeleteAllConfirm = true }
                         )
-                    }
-                }
-            }
-
-            // ── Daha Fazla Paneli ──
-            if (showMorePanel) {
-                var moreSubPage by remember { mutableStateOf("") } // "" = grid, "settings" = ayarlar
-                var showVerseStory by remember { mutableStateOf(false) }
-                var showHadithStory by remember { mutableStateOf(false) }
-                var showQuoteStory by remember { mutableStateOf(false) }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(bg)
-                ) {
+                        3 -> {
+                            // ── Daha Fazla Paneli ──
+                            var moreSubPage by remember { mutableStateOf("") } // "" = grid, "settings" = ayarlar
+                            var showVerseStory by remember { mutableStateOf(false) }
+                            var showHadithStory by remember { mutableStateOf(false) }
+                            var showQuoteStory by remember { mutableStateOf(false) }
+            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(bg)
+                            ) {
                     when (moreSubPage) {
                         "" -> {
                             // Grid ana sayfası
@@ -679,7 +675,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                                     .padding(20.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { showMorePanel = false; currentTab = 0 }) {
+                                    IconButton(onClick = { currentTab = 0 }) {
                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = onSurface)
                                     }
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -737,7 +733,7 @@ private fun CounterScreen(activity: android.app.Activity) {
                                         bgColor = morePanelCardColor,
                                         textColor = onSurface,
                                         modifier = Modifier.weight(1f),
-                                        onClick = { moreSubPage = "qibla" }
+                                        onClick = { /* moreSubPage = "qibla" */ } // TODO: Özellik şimdilik pasif
                                     )
                                     MorePanelItem(
                                         emoji = "\uD83D\uDCDC",
@@ -909,6 +905,9 @@ private fun CounterScreen(activity: android.app.Activity) {
                             selectedLanguage = selectedLanguage,
                             onDismiss = { showQuoteStory = false }
                         )
+                    }
+                            }
+                        }
                     }
                 }
             }
@@ -1126,13 +1125,7 @@ private fun CounterTab(
     val tertiary = MaterialTheme.colorScheme.tertiary
     val bg = MaterialTheme.colorScheme.background
 
-    // MediaPlayer for dhikr sounds
-    val currentMediaPlayer = remember { mutableStateOf<MediaPlayer?>(null) }
-    DisposableEffect(Unit) {
-        onDispose {
-            currentMediaPlayer.value?.release()
-        }
-    }
+
 
     val progress = if (target > 0) (count.toFloat() / target).coerceAtMost(1f) else 0f
     val animatedProgress by animateFloatAsState(
@@ -1225,22 +1218,7 @@ private fun CounterTab(
                             }
                         } catch (_: Exception) {}
                     }
-                    if (isSoundEnabled) {
-                        try {
-                            val dhikr = dhikrTypes.getOrElse(selectedDhikrIndex) { dhikrTypes[0] }
-                            val resId = dhikr.soundResId
-                            if (resId != null) {
-                                currentMediaPlayer.value?.release()
-                                val mp = MediaPlayer.create(context, resId)
-                                mp?.setOnCompletionListener { it.release() }
-                                mp?.start()
-                                currentMediaPlayer.value = mp
-                            } else {
-                                val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                                am.playSoundEffect(AudioManager.FX_KEY_CLICK)
-                            }
-                        } catch (_: Exception) {}
-                    }
+
                 }
         ) {
             // Arka halka
@@ -1294,54 +1272,7 @@ private fun CounterTab(
             }
         }
 
-            // ON/OFF Sound Toggle - sağ üst köşe
-            val toggleBg = if (isDarkTheme) surfaceVariant else Color(0xFFE0E0E0)
-            val toggleTextColor = if (isDarkTheme) Color.White else Color(0xFF212121)
-            Surface(
-                onClick = { onSoundEnabledChange(!isSoundEnabled) },
-                shape = RoundedCornerShape(20.dp),
-                color = toggleBg,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 20.dp, y = (-10).dp)
-                    .height(34.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    if (isSoundEnabled) {
-                        Text(
-                            text = t("Açık", "ON", "AN", "مفعّل"),
-                            color = toggleTextColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .background(primary)
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .background(ErrorRed)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = t("Kapalı", "OFF", "AUS", "معطّل"),
-                            color = toggleTextColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
+
         } // outer Box end
 
         Spacer(modifier = Modifier.height(8.dp))
